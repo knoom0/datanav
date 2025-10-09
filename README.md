@@ -13,10 +13,10 @@
   [![Next.js](https://img.shields.io/badge/Next.js-14-black)](https://nextjs.org/)
   [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)](https://www.typescriptlang.org/)
 
+https://github.com/user-attachments/assets/c448320a-b52b-4270-a4f8-660e7c5a91ed
+
 </div>
 <!-- markdownlint-enable MD033 MD001 -->
-
-https://github.com/user-attachments/assets/c448320a-b52b-4270-a4f8-660e7c5a91ed
 
 ## Introduction
 
@@ -313,7 +313,7 @@ datanav/
 
 **Interested in contributing?**
 
-Please send an email to [westcool10@gmail.com](mailto:westcool10@gmail.com) to discuss how you can contribute. Whether it's:
+Please send an email to [moonk.94043@gmail.com](mailto:moonk.94043@gmail.com) to discuss how you can contribute. Whether it's:
 
 - 🐛 Bug fixes
 - ✨ New features
@@ -334,7 +334,7 @@ DataNav is released under the [MIT License](LICENSE). You're free to use, modify
 ## Support
 
 - **Issues**: [GitHub Issues](https://github.com/yourusername/datanav/issues)
-- **Email**: <westcool10@gmail.com>
+- **Email**: <moonk.94043@gmail.com>
 
 ---
 
