@@ -5,15 +5,7 @@
 
   <img src="public/logo.png" alt="DataNav Logo" width="200" />
 
-  <iframe
-    width="400"
-    height="711"
-    src="https://www.youtube.com/embed/eLNEXjVEVgM"
-    title="DataNav Demo"
-    frameborder="0"
-    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-    allowfullscreen>
-  </iframe>
+
 
 ### Your Personal AI Data Analyst
 
@@ -23,6 +15,8 @@
 
 </div>
 <!-- markdownlint-enable MD033 MD001 -->
+
+https://github.com/user-attachments/assets/c448320a-b52b-4270-a4f8-660e7c5a91ed
 
 ## Introduction
 
