@@ -1,0 +1,94 @@
+# Single Exit Point Pattern
+
+## Description
+
+Use guard clauses and single exit point pattern for better code readability and maintainability. Functions should have a single return statement at the end, with guard clauses handling early exit conditions.
+
+## Pattern
+
+❌ Don't:
+```typescript
+function processData(input: string): Result {
+  if (!input) {
+    return { error: "Invalid input" };
+  }
+  
+  if (input.length < 5) {
+    return { error: "Input too short" };
+  }
+  
+  const processed = transform(input);
+  if (processed.failed) {
+    return { error: "Processing failed" };
+  }
+  
+  return { success: true, data: processed.data };
+}
+```
+
+✅ Do:
+```typescript
+function processData(input: string): Result {
+  // Initialize result object
+  let result: Result = { 
+    success: false, 
+    error: '', 
+    data: null 
+  };
+  
+  // Guard clause: validate input
+  if (!input) {
+    result.error = "Invalid input";
+    return result;
+  }
+  
+  // Guard clause: check minimum length
+  if (input.length < 5) {
+    result.error = "Input too short";
+    return result;
+  }
+  
+  const processed = transform(input);
+  
+  // Guard clause: check processing result
+  if (processed.failed) {
+    result.error = "Processing failed";
+    return result;
+  }
+  
+  // Success case
+  result.success = true;
+  result.data = processed.data;
+  
+  return result;
+}
+```
+
+## Benefits
+
+- **Consistent Return Format**: All return statements use the same result structure
+- **Early Exit**: Guard clauses handle error conditions immediately
+- **Reduced Nesting**: Eliminates deep if-else nesting
+- **Single Source of Truth**: One return statement at the end for the main logic flow
+- **Easier Testing**: Predictable return format makes testing simpler
+- **Better Readability**: Clear separation between validation and business logic
+
+## When to Apply
+
+- Functions with multiple conditional return paths
+- Complex business logic with validation steps
+- Functions that return structured results
+- Methods with both success and error scenarios
+- APIs that need consistent response formats
+
+## Implementation Guidelines
+
+1. **Initialize Result Object**: Create a result object at the beginning with default values
+2. **Use Guard Clauses**: Handle validation and error conditions first with early returns
+3. **Single Success Path**: Have one main logic flow for the success case
+4. **Consistent Structure**: Use the same result object structure throughout
+5. **Clear Comments**: Label guard clauses for clarity
+
+## File Pattern
+
+`**/*.ts`, `**/*.tsx`

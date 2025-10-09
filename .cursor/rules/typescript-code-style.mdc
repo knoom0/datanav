@@ -1,0 +1,86 @@
+# Use Props Object Pattern
+
+## Description
+
+Always use destructured object parameters instead of multiple individual parameters for functions that take more than 2 parameters, or when parameters are optional and could benefit from named arguments.
+
+## Pattern
+
+❌ Don't:
+
+```typescript
+function processData(name: string, age: number, email?: string, isActive?: boolean) {
+  // ...
+}
+
+function researchComponent(componentInfo: ComponentInfo, options: Options = {}) {
+  // ...
+}
+
+// Multiple parameters without clear meaning
+function createUser(firstName: string, lastName: string, email: string, age: number, isAdmin: boolean) {
+  // ...
+}
+```
+
+✅ Do:
+
+```typescript
+function processData({ name, age, email, isActive }: {
+  name: string;
+  age: number;
+  email?: string;
+  isActive?: boolean;
+}) {
+  // ...
+}
+
+function researchComponent({ componentInfo, model, packageMetadata }: {
+  componentInfo: ComponentInfo;
+  model?: LanguageModelV1;
+  packageMetadata: PackageMetadata;
+}) {
+  // ...
+}
+
+// Clear, self-documenting parameters
+function createUser({ firstName, lastName, email, age, isAdmin }: {
+  firstName: string;
+  lastName: string;
+  email: string;
+  age: number;
+  isAdmin: boolean;
+}) {
+  // ...
+}
+```
+
+## Rationale
+
+- Improves readability and self-documentation
+- Makes parameters self-documenting at call site
+- Allows for easier parameter reordering
+- Reduces likelihood of parameter order mistakes
+- Makes optional parameters clearer
+- Follows modern JavaScript/TypeScript best practices
+- Easier to extend with new parameters without breaking existing calls
+- Better IntelliSense support and autocomplete
+
+## When to Use
+
+- Functions with more than 2 parameters
+- Functions with optional parameters
+- Functions where parameter names provide important context
+- Configuration or options objects
+- API functions that might evolve over time
+- Public API functions that other developers will use
+
+## When NOT to Use
+
+- Simple utility functions with 1-2 obvious parameters
+- Functions where parameter order is conventional (e.g., `Math.pow(base, exponent)`)
+- Performance-critical code where object creation overhead matters
+
+## File Pattern
+
+`**/*.ts`, `**/*.tsx`

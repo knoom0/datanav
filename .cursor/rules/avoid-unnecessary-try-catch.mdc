@@ -1,0 +1,86 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Avoid Unnecessary Try-Catch Blocks
+
+## Description
+Avoid unnecessary try-catch blocks that don't add meaningful error handling. This includes:
+- API routes where Next.js handles errors automatically
+- Cases where you only log the error and re-throw it
+- Wrapping code that would naturally propagate errors to the caller
+
+## Pattern
+```typescript
+try {
+  // code
+} catch (error) {
+  // error handling
+}
+```
+
+## Examples
+
+### API Routes
+❌ Don't:
+```typescript
+export async function POST(req: Request) {
+  try {
+    const data = await req.json();
+    // ... rest of the code
+    return Response.json(data);
+  } catch (error) {
+    return Response.json({ error: 'Failed' }, { status: 500 });
+  }
+}
+```
+
+✅ Do:
+```typescript
+export async function POST(req: Request) {
+  const data = await req.json();
+  // ... rest of the code
+  return Response.json(data);
+}
+```
+
+### Logging and Re-throwing
+❌ Don't:
+```typescript
+async function processData() {
+  try {
+    const result = await someAsyncOperation();
+    return result;
+  } catch (error) {
+    console.error('Failed to process data:', error);
+    throw error;
+  }
+}
+```
+
+✅ Do:
+```typescript
+async function processData() {
+  const result = await someAsyncOperation();
+  return result;
+}
+```
+
+## Rationale
+- Next.js provides built-in error handling for API routes
+- Unnecessary try-catch blocks add boilerplate code without value
+- Simpler code is easier to maintain and read
+- Error handling is consistent across the application
+- Logging and re-throwing doesn't provide additional error handling value
+- Natural error propagation often provides better stack traces
+- Reduces code complexity and improves readability
+
+## When Try-Catch IS Appropriate
+- Converting errors to return values (e.g., in tool interfaces)
+- Providing fallback behavior or recovery logic
+- Adding meaningful context or transforming errors
+- Handling specific error types differently
+
+## File Pattern
+`**/*.ts`, `**/*.tsx`

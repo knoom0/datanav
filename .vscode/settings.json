@@ -1,0 +1,29 @@
+{
+    "editor.codeActionsOnSave": {
+        "source.fixAll.eslint": "explicit"
+    },
+    "editor.tabSize": 2,
+    "eslint.validate": [
+        "javascript",
+        "javascriptreact",
+        "typescript",
+        "typescriptreact"
+    ],
+    "jest.autoRun": false,
+    "sqltools.connections": [
+        {
+            "previewLimit": 50,
+            "server": "localhost",
+            "port": 5432,
+            "driver": "PostgreSQL",
+            "name": "local",
+            "database": "pizza_test",
+            "username": "postgres",
+            "password": "postgres"
+        }
+    ],
+    "task.allowAutomaticTasks": "on",
+    "task.quickOpen.history": 10,
+    "task.quickOpen.detail": "true",
+    "task.quickOpen.skip": false
+}

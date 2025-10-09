@@ -1,0 +1,87 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Start Docker Services",
+            "type": "shell",
+            "command": "docker",
+            "args": ["compose", "up", "-d"],
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": false
+            },
+            "options": {
+                "statusbar": {
+                    "label": "$(database) Starting Docker services..."
+                }
+            },
+            "problemMatcher": [],
+            "runOptions": {
+                "runOn": "folderOpen"
+            }
+        },
+        {
+            "label": "Stop Docker Services",
+            "type": "shell",
+            "command": "docker",
+            "args": ["compose", "down"],
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": false
+            },
+            "options": {
+                "statusbar": {
+                    "label": "$(database) Stopping Docker services..."
+                }
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Restart Docker Services",
+            "type": "shell",
+            "command": "docker",
+            "args": ["compose", "restart"],
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": false
+            },
+            "options": {
+                "statusbar": {
+                    "label": "$(database) Restarting Docker services..."
+                }
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "View Docker Services Status",
+            "type": "shell",
+            "command": "docker",
+            "args": ["compose", "ps"],
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": false
+            },
+            "problemMatcher": []
+        }
+    ]
+} 

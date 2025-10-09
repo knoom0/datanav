@@ -1,0 +1,14 @@
+.mobile-width {
+  width: 752px;      /* default fixed width (mobile simulation) */
+  height: 100vh;
+  margin: 0 auto;
+  overflow-y: auto;
+}
+
+/* If the screen width is less than 480px (or whatever threshold you prefer),
+   let it expand to 100% */
+@media (max-width: 752px) {
+  .mobile-width {
+    width: 100%;
+  }
+}

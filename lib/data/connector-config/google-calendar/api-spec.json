@@ -1,0 +1,940 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Google Calendar API (subset)",
+    "version": "v3",
+    "description": "An OpenAPI 3.0 spec covering commonly used Google Calendar v3 REST endpoints:\nEvents CRUD, Freebusy query, Colors, Calendars.get, and CalendarList.list.\nBased on Google Developers reference docs.\n",
+    "contact": {
+      "name": "Google Workspace Developers"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://www.googleapis.com/calendar/v3"
+    }
+  ],
+  "security": [
+    {
+      "oauth2": [
+        "https://www.googleapis.com/auth/calendar"
+      ]
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "oauth2": {
+        "type": "oauth2",
+        "flows": {
+          "authorizationCode": {
+            "authorizationUrl": "https://accounts.google.com/o/oauth2/v2/auth",
+            "tokenUrl": "https://oauth2.googleapis.com/token",
+            "scopes": {
+              "https://www.googleapis.com/auth/calendar": "Read and write access to Calendar.",
+              "https://www.googleapis.com/auth/calendar.readonly": "Read-only access to Calendar.",
+              "https://www.googleapis.com/auth/calendar.events": "Read and write access to events.",
+              "https://www.googleapis.com/auth/calendar.events.readonly": "Read-only access to events.",
+              "https://www.googleapis.com/auth/calendar.events.freebusy": "Read free/busy information.",
+              "https://www.googleapis.com/auth/calendar.freebusy": "Read free/busy information.",
+              "https://www.googleapis.com/auth/calendar.settings.readonly": "Read-only access to settings.",
+              "https://www.googleapis.com/auth/calendar.calendarlist": "Read and write access to calendar list.",
+              "https://www.googleapis.com/auth/calendar.calendarlist.readonly": "Read-only access to calendar list.",
+              "https://www.googleapis.com/auth/calendar.app.created": "Manage calendars created by your app."
+            }
+          }
+        }
+      }
+    },
+    "parameters": {
+      "CalendarId": {
+        "name": "calendarId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        },
+        "description": "Calendar identifier ('primary' or a calendar ID)."
+      },
+      "EventId": {
+        "name": "eventId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        },
+        "description": "Event identifier."
+      }
+    },
+    "schemas": {
+      "EventDateTime": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date",
+            "description": "All-day event date (no time)."
+          },
+          "dateTime": {
+            "type": "string",
+            "description": "RFC3339 timestamp for timed events."
+          },
+          "timeZone": {
+            "type": "string",
+            "description": "IANA time zone."
+          }
+        }
+      },
+      "Attendee": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "organizer": {
+            "type": "boolean"
+          },
+          "self": {
+            "type": "boolean"
+          },
+          "resource": {
+            "type": "boolean"
+          },
+          "optional": {
+            "type": "boolean"
+          },
+          "responseStatus": {
+            "type": "string",
+            "enum": [
+              "needsAction",
+              "declined",
+              "tentative",
+              "accepted"
+            ]
+          },
+          "comment": {
+            "type": "string"
+          },
+          "additionalGuests": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "EventReminders": {
+        "type": "object",
+        "properties": {
+          "useDefault": {
+            "type": "boolean"
+          },
+          "overrides": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "method": {
+                  "type": "string",
+                  "enum": [
+                    "email",
+                    "popup"
+                  ]
+                },
+                "minutes": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        }
+      },
+      "Event": {
+        "type": "object",
+        "description": "Simplified Event resource.",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "example": "calendar#event"
+          },
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "confirmed",
+              "tentative",
+              "cancelled"
+            ]
+          },
+          "htmlLink": {
+            "type": "string",
+            "format": "uri"
+          },
+          "created": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "location": {
+            "type": "string"
+          },
+          "colorId": {
+            "type": "string"
+          },
+          "creator": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "email": {
+                "type": "string",
+                "format": "email"
+              },
+              "displayName": {
+                "type": "string"
+              },
+              "self": {
+                "type": "boolean"
+              }
+            }
+          },
+          "organizer": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "email": {
+                "type": "string",
+                "format": "email"
+              },
+              "displayName": {
+                "type": "string"
+              },
+              "self": {
+                "type": "boolean"
+              }
+            }
+          },
+          "start": {
+            "$ref": "#/components/schemas/EventDateTime"
+          },
+          "end": {
+            "$ref": "#/components/schemas/EventDateTime"
+          },
+          "endTimeUnspecified": {
+            "type": "boolean"
+          },
+          "recurrence": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "RRULE string"
+            }
+          },
+          "recurringEventId": {
+            "type": "string"
+          },
+          "originalStartTime": {
+            "$ref": "#/components/schemas/EventDateTime"
+          },
+          "transparency": {
+            "type": "string",
+            "enum": [
+              "opaque",
+              "transparent"
+            ]
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "default",
+              "public",
+              "private",
+              "confidential"
+            ]
+          },
+          "iCalUID": {
+            "type": "string"
+          },
+          "sequence": {
+            "type": "integer"
+          },
+          "attendees": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Attendee"
+            }
+          },
+          "attendeesOmitted": {
+            "type": "boolean"
+          },
+          "extendedProperties": {
+            "type": "object",
+            "properties": {
+              "private": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "shared": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "hangoutLink": {
+            "type": "string"
+          },
+          "conferenceData": {
+            "type": "object",
+            "properties": {
+              "conferenceId": {
+                "type": "string"
+              },
+              "notes": {
+                "type": "string"
+              }
+            }
+          },
+          "reminders": {
+            "$ref": "#/components/schemas/EventReminders"
+          },
+          "color": {
+            "type": "string",
+            "deprecated": true
+          }
+        }
+      },
+      "EventList": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "example": "calendar#events"
+          },
+          "etag": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "timeZone": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Event"
+            }
+          },
+          "nextPageToken": {
+            "type": "string"
+          },
+          "nextSyncToken": {
+            "type": "string"
+          }
+        }
+      },
+      "Colors": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "example": "calendar#colors"
+          },
+          "updated": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "calendar": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "background": {
+                  "type": "string",
+                  "example": "#9a9cff"
+                },
+                "foreground": {
+                  "type": "string",
+                  "example": "#000000"
+                }
+              }
+            }
+          },
+          "event": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "background": {
+                  "type": "string",
+                  "example": "#9a9cff"
+                },
+                "foreground": {
+                  "type": "string",
+                  "example": "#000000"
+                }
+              }
+            }
+          }
+        }
+      },
+      "FreeBusyRequest": {
+        "type": "object",
+        "required": [
+          "timeMin",
+          "timeMax",
+          "items"
+        ],
+        "properties": {
+          "timeMin": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "timeMax": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "timeZone": {
+            "type": "string"
+          },
+          "groupExpansionMax": {
+            "type": "integer",
+            "maximum": 100
+          },
+          "calendarExpansionMax": {
+            "type": "integer",
+            "maximum": 50
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "Calendar or group ID"
+                }
+              }
+            }
+          }
+        }
+      },
+      "FreeBusyResponse": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "example": "calendar#freeBusy"
+          },
+          "timeMin": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "timeMax": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "calendars": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "busy": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "start": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "end": {
+                        "type": "string",
+                        "format": "date-time"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/calendars/{calendarId}/events": {
+      "get": {
+        "operationId": "events_list",
+        "summary": "Lists events on a calendar.",
+        "security": [
+          {
+            "oauth2": [
+              "https://www.googleapis.com/auth/calendar.readonly"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CalendarId"
+          },
+          {
+            "in": "query",
+            "name": "maxResults",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2500
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageToken",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "timeMin",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "in": "query",
+            "name": "timeMax",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "in": "query",
+            "name": "singleEvents",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "orderBy",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "startTime",
+                "updated"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "updatedMin",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "in": "query",
+            "name": "syncToken",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "showDeleted",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of events.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventList"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "events_insert",
+        "summary": "Creates an event.",
+        "security": [
+          {
+            "oauth2": [
+              "https://www.googleapis.com/auth/calendar.events"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CalendarId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Event"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Created event.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Event"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/calendars/{calendarId}/events/{eventId}": {
+      "get": {
+        "operationId": "events_get",
+        "summary": "Gets a single event.",
+        "security": [
+          {
+            "oauth2": [
+              "https://www.googleapis.com/auth/calendar.readonly"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CalendarId"
+          },
+          {
+            "$ref": "#/components/parameters/EventId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Event.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Event"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "events_patch",
+        "summary": "Patches an event.",
+        "security": [
+          {
+            "oauth2": [
+              "https://www.googleapis.com/auth/calendar.events"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CalendarId"
+          },
+          {
+            "$ref": "#/components/parameters/EventId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Event"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated event.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Event"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "events_update",
+        "summary": "Updates an event.",
+        "security": [
+          {
+            "oauth2": [
+              "https://www.googleapis.com/auth/calendar.events"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CalendarId"
+          },
+          {
+            "$ref": "#/components/parameters/EventId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Event"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated event.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Event"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "events_delete",
+        "summary": "Deletes an event.",
+        "security": [
+          {
+            "oauth2": [
+              "https://www.googleapis.com/auth/calendar.events"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CalendarId"
+          },
+          {
+            "$ref": "#/components/parameters/EventId"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted."
+          }
+        }
+      }
+    },
+    "/colors": {
+      "get": {
+        "operationId": "colors_get",
+        "summary": "Returns color definitions for calendars and events.",
+        "security": [
+          {
+            "oauth2": [
+              "https://www.googleapis.com/auth/calendar.readonly"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Colors palette.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Colors"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/freeBusy": {
+      "post": {
+        "operationId": "freebusy_query",
+        "summary": "Returns free/busy information.",
+        "security": [
+          {
+            "oauth2": [
+              "https://www.googleapis.com/auth/calendar.readonly"
+            ]
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FreeBusyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Free/busy results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FreeBusyResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/calendars/{calendarId}": {
+      "get": {
+        "operationId": "calendars_get",
+        "summary": "Gets metadata for a calendar.",
+        "security": [
+          {
+            "oauth2": [
+              "https://www.googleapis.com/auth/calendar.readonly"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CalendarId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Calendar metadata.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/me/calendarList": {
+      "get": {
+        "operationId": "calendarlist_list",
+        "summary": "Lists the calendars in the user's calendar list.",
+        "security": [
+          {
+            "oauth2": [
+              "https://www.googleapis.com/auth/calendar.calendarlist.readonly"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "maxResults",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 250
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageToken",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "minAccessRole",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "freeBusyReader",
+                "reader",
+                "writer",
+                "owner"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "CalendarList page.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "example": "calendar#calendarList"
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    },
+                    "nextPageToken": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

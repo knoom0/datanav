@@ -1,0 +1,75 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Use Mantine Components
+
+## Description
+
+Use Mantine components instead of raw HTML elements or other UI libraries. Mantine provides a comprehensive set of accessible, customizable, and well-designed components that follow consistent patterns and best practices.
+
+## Pattern
+
+❌ Don't:
+
+```tsx
+<div className="flex flex-col h-screen max-w-4xl mx-auto p-4">
+  <h1 className="text-2xl font-bold mb-4">Title</h1>
+  <div className="flex-1 overflow-y-auto mb-4">
+    <div className="p-4 rounded-lg bg-gray-100">
+      Content
+    </div>
+  </div>
+  <form className="flex gap-2">
+    <input className="flex-1 p-2 border rounded-lg" />
+    <button className="px-4 py-2 bg-blue-500 text-white rounded-lg">
+      Submit
+    </button>
+  </form>
+</div>
+```
+
+✅ Do:
+
+```tsx
+<Container size="lg" h="100vh" py="md">
+  <Stack h="100%">
+    <Title order={1}>Title</Title>
+    <ScrollArea flex={1}>
+      <Paper p="md" radius="md" withBorder>
+        Content
+      </Paper>
+    </ScrollArea>
+    <Group gap="xs">
+      <TextInput style={{ flex: 1 }} />
+      <Button>Submit</Button>
+    </Group>
+  </Stack>
+</Container>
+```
+
+## Rationale
+
+- Consistent design system across the application
+- Built-in accessibility features
+- Responsive and mobile-friendly components
+- Type-safe props and better developer experience
+- Rich set of pre-built components and hooks
+- Better performance through optimized rendering
+- Built-in dark mode support
+- Comprehensive theming system
+
+## Common Mantine Components to Use
+
+- Layout: `Container`, `Stack`, `Group`, `Grid`, `Paper`
+- Typography: `Title`, `Text`, `List`
+- Forms: `TextInput`, `Select`, `Checkbox`, `Radio`
+- Navigation: `Button`, `Tabs`, `Menu`
+- Feedback: `Alert`, `Notification`, `Modal`
+- Data Display: `Table`, `Card`, `Avatar`
+- Overlay: `Modal`, `Drawer`, `Tooltip`
+
+## File Pattern
+
+`app/**/*.tsx`
