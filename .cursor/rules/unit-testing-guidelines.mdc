@@ -1,0 +1,77 @@
+# Unit Testing Guidelines
+
+## Description
+
+When adding new functions, include unit tests with minimum coverage requirements. Focus on essential functionality rather than exhaustive edge case coverage for simple utility functions.
+
+## Pattern
+
+❌ Don't:
+```typescript
+// Too many test cases for a simple utility function
+describe('isPreviewServerAvailable', () => {
+  it('should return true when server is available', () => {});
+  it('should return false when server is not available', () => {});
+  it('should return false when server responds with error status', () => {});
+  it('should respect custom baseUrl', () => {});
+  it('should timeout after specified timeout period', () => {});
+  it('should handle network errors', () => {});
+  it('should handle invalid URLs', () => {});
+});
+```
+
+✅ Do:
+```typescript
+// Simple utility function - at most 2 test cases
+describe('isPreviewServerAvailable', () => {
+  it('should return true when server is available', () => {
+    // happy path test
+  });
+
+  it('should return false when server is not available', () => {
+    // non-happy path test
+  });
+});
+
+// BaseAgentTool child class - at least 2 test cases per method
+describe('MyAgentTool', () => {
+  describe('execute', () => {
+    it('should successfully execute with valid input', () => {
+      // success case
+    });
+
+    it('should handle errors gracefully', () => {
+      // error case
+    });
+  });
+});
+```
+
+## Rationale
+
+- Keeps test suites maintainable and focused
+- Reduces test execution time
+- Focuses on essential functionality
+- Prevents over-testing of simple utilities
+- Ensures critical paths have adequate coverage
+- Balances thoroughness with practicality
+
+## Minimum Test Coverage Requirements
+
+### Simple Utility Functions
+- **At most 2 test cases**: happy path and non-happy path
+- Focus on core functionality and edge cases
+
+### BaseAgentTool Child Classes
+- **At least 2 test cases** for each method
+- Test both successful execution and error handling scenarios
+
+### When to Add More Tests
+- Complex business logic may warrant additional test cases
+- Functions with multiple branches or conditions
+- Functions that handle different data types or formats
+- Critical path functions that could break core functionality
+
+## File Pattern
+
+`**/*.test.ts`, `**/*.test.tsx`

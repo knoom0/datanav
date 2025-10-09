@@ -1,0 +1,487 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "YouTube Data API v3 (Activities subset)",
+    "version": "v3",
+    "description": "An OpenAPI 3.0 spec covering the YouTube Data API v3 activities endpoint.\nBased on Google Developers reference docs.\n",
+    "contact": {
+      "name": "Google Developers"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://www.googleapis.com/youtube/v3"
+    }
+  ],
+  "security": [
+    {
+      "oauth2": [
+        "https://www.googleapis.com/auth/youtube.readonly"
+      ]
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "oauth2": {
+        "type": "oauth2",
+        "flows": {
+          "authorizationCode": {
+            "authorizationUrl": "https://accounts.google.com/o/oauth2/v2/auth",
+            "tokenUrl": "https://oauth2.googleapis.com/token",
+            "scopes": {
+              "https://www.googleapis.com/auth/youtube.readonly": "View your YouTube account",
+              "https://www.googleapis.com/auth/youtube": "Manage your YouTube account",
+              "https://www.googleapis.com/auth/youtube.force-ssl": "View and manage your YouTube data via SSL"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "ActivitySnippet": {
+        "type": "object",
+        "properties": {
+          "publishedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "The date and time that the activity occurred."
+          },
+          "channelId": {
+            "type": "string",
+            "description": "The ID of the channel that published the activity."
+          },
+          "title": {
+            "type": "string",
+            "description": "The title of the activity."
+          },
+          "description": {
+            "type": "string",
+            "description": "The description of the activity."
+          },
+          "thumbnails": {
+            "type": "object",
+            "description": "Thumbnails for the activity.",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "url": {
+                  "type": "string"
+                },
+                "width": {
+                  "type": "integer"
+                },
+                "height": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "channelTitle": {
+            "type": "string",
+            "description": "The title of the channel that published the activity."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "upload",
+              "like",
+              "favorite",
+              "comment",
+              "subscription",
+              "playlistItem",
+              "recommendation",
+              "bulletin",
+              "social",
+              "channelItem"
+            ],
+            "description": "The type of activity."
+          },
+          "groupId": {
+            "type": "string",
+            "description": "The group ID associated with the activity."
+          }
+        }
+      },
+      "ActivityContentDetails": {
+        "type": "object",
+        "properties": {
+          "upload": {
+            "type": "object",
+            "properties": {
+              "videoId": {
+                "type": "string"
+              }
+            }
+          },
+          "like": {
+            "type": "object",
+            "properties": {
+              "resourceId": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string"
+                  },
+                  "videoId": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "favorite": {
+            "type": "object",
+            "properties": {
+              "resourceId": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string"
+                  },
+                  "videoId": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "comment": {
+            "type": "object",
+            "properties": {
+              "resourceId": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string"
+                  },
+                  "videoId": {
+                    "type": "string"
+                  },
+                  "channelId": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "subscription": {
+            "type": "object",
+            "properties": {
+              "resourceId": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string"
+                  },
+                  "channelId": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "playlistItem": {
+            "type": "object",
+            "properties": {
+              "resourceId": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string"
+                  },
+                  "videoId": {
+                    "type": "string"
+                  }
+                }
+              },
+              "playlistId": {
+                "type": "string"
+              },
+              "playlistItemId": {
+                "type": "string"
+              }
+            }
+          },
+          "recommendation": {
+            "type": "object",
+            "properties": {
+              "resourceId": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string"
+                  },
+                  "videoId": {
+                    "type": "string"
+                  },
+                  "channelId": {
+                    "type": "string"
+                  }
+                }
+              },
+              "reason": {
+                "type": "string"
+              },
+              "seedResourceId": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string"
+                  },
+                  "videoId": {
+                    "type": "string"
+                  },
+                  "channelId": {
+                    "type": "string"
+                  },
+                  "playlistId": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "bulletin": {
+            "type": "object",
+            "properties": {
+              "resourceId": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string"
+                  },
+                  "videoId": {
+                    "type": "string"
+                  },
+                  "channelId": {
+                    "type": "string"
+                  },
+                  "playlistId": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "social": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string"
+              },
+              "resourceId": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string"
+                  },
+                  "videoId": {
+                    "type": "string"
+                  },
+                  "channelId": {
+                    "type": "string"
+                  },
+                  "playlistId": {
+                    "type": "string"
+                  }
+                }
+              },
+              "author": {
+                "type": "string"
+              },
+              "referenceUrl": {
+                "type": "string"
+              },
+              "imageUrl": {
+                "type": "string"
+              }
+            }
+          },
+          "channelItem": {
+            "type": "object",
+            "properties": {
+              "resourceId": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string"
+                  },
+                  "videoId": {
+                    "type": "string"
+                  },
+                  "channelId": {
+                    "type": "string"
+                  },
+                  "playlistId": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "Activity": {
+        "type": "object",
+        "description": "YouTube activity resource.",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "example": "youtube#activity"
+          },
+          "etag": {
+            "type": "string",
+            "description": "The ETag of the activity resource."
+          },
+          "id": {
+            "type": "string",
+            "description": "The ID of the activity."
+          },
+          "snippet": {
+            "$ref": "#/components/schemas/ActivitySnippet"
+          },
+          "contentDetails": {
+            "$ref": "#/components/schemas/ActivityContentDetails"
+          }
+        }
+      },
+      "ActivityListResponse": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "example": "youtube#activityListResponse"
+          },
+          "etag": {
+            "type": "string"
+          },
+          "nextPageToken": {
+            "type": "string",
+            "description": "Token for the next page of results."
+          },
+          "prevPageToken": {
+            "type": "string",
+            "description": "Token for the previous page of results."
+          },
+          "pageInfo": {
+            "type": "object",
+            "properties": {
+              "totalResults": {
+                "type": "integer"
+              },
+              "resultsPerPage": {
+                "type": "integer"
+              }
+            }
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Activity"
+            }
+          }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/activities": {
+      "get": {
+        "operationId": "activities_list",
+        "summary": "Returns a list of channel activity events.",
+        "security": [
+          {
+            "oauth2": [
+              "https://www.googleapis.com/auth/youtube.readonly"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "part",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Comma-separated list of properties to include (e.g., 'snippet,contentDetails')"
+          },
+          {
+            "in": "query",
+            "name": "channelId",
+            "schema": {
+              "type": "string"
+            },
+            "description": "The channel ID to retrieve activities for."
+          },
+          {
+            "in": "query",
+            "name": "mine",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Set to true to retrieve activities for the authenticated user's channel."
+          },
+          {
+            "in": "query",
+            "name": "maxResults",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 50,
+              "default": 5
+            },
+            "description": "Maximum number of results to return."
+          },
+          {
+            "in": "query",
+            "name": "pageToken",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Token for a specific page of results."
+          },
+          {
+            "in": "query",
+            "name": "publishedAfter",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Only return activities published after this date."
+          },
+          {
+            "in": "query",
+            "name": "publishedBefore",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Only return activities published before this date."
+          },
+          {
+            "in": "query",
+            "name": "regionCode",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Two-letter ISO country code."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A list of activities.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivityListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+

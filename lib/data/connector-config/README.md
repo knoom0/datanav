@@ -1,0 +1,1 @@
+TODO(moonk): Document how to add a new connector config.

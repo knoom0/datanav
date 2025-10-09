@@ -1,0 +1,71 @@
+# Define Constants for Hard-coded Values
+
+## Description
+
+Always define hard-coded numeric or string values as named constants instead of using magic numbers or strings directly in code. This improves code maintainability, readability, and makes values easier to modify.
+
+## Pattern
+
+❌ Don't:
+```typescript
+// Magic numbers
+const timeout = 5000;
+const maxRetries = 3;
+const windowWidth = 800;
+
+// Magic strings
+const apiUrl = "https://api.example.com/v1";
+const errorMessage = "Connection failed";
+const windowFeatures = "width=500,height=600,scrollbars=yes";
+
+// In function calls
+setTimeout(callback, 5000);
+window.open(url, "oauth", "width=500,height=600,scrollbars=yes,resizable=yes");
+```
+
+✅ Do:
+```typescript
+// Define constants with descriptive names
+const REQUEST_TIMEOUT_MS = 5000;
+const MAX_RETRY_ATTEMPTS = 3;
+const DEFAULT_WINDOW_WIDTH = 800;
+const OAUTH_WINDOW_WIDTH = 500;
+const OAUTH_WINDOW_HEIGHT = 600;
+
+const API_BASE_URL = "https://api.example.com/v1";
+const CONNECTION_ERROR_MESSAGE = "Connection failed";
+const OAUTH_WINDOW_FEATURES = `width=${OAUTH_WINDOW_WIDTH},height=${OAUTH_WINDOW_HEIGHT},scrollbars=yes,resizable=yes`;
+
+// Use constants in code
+setTimeout(callback, REQUEST_TIMEOUT_MS);
+window.open(url, "oauth", OAUTH_WINDOW_FEATURES);
+```
+
+## Naming Conventions
+
+- Use `SCREAMING_SNAKE_CASE` for constants
+- Use descriptive names that explain the purpose
+- Include units when relevant (e.g., `_MS`, `_PX`, `_SECONDS`)
+- Group related constants together
+
+## Exceptions
+
+Constants are not required for:
+- Array indices: `array[0]`, `array[1]`
+- Mathematical operations: `Math.PI * 2`
+- Standard library values: `process.env.NODE_ENV`
+- Single-use values in simple utility functions
+- Test data and mock values
+- Configuration values that are already centralized
+
+## Rationale
+
+- **Maintainability**: Easy to update values in one place
+- **Readability**: Self-documenting code with meaningful names
+- **Consistency**: Ensures the same values are used throughout the codebase
+- **Refactoring**: Safer to change values when they're centralized
+- **Debugging**: Easier to identify and modify problematic values
+
+## File Pattern
+
+`**/*.ts`, `**/*.tsx`, `**/*.js`, `**/*.jsx`

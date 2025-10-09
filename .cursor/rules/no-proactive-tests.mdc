@@ -1,0 +1,55 @@
+# Do Not Add Tests Proactively
+
+## Description
+
+Do not add tests proactively when implementing new functionality. Only add tests when explicitly asked to do so by the user.
+
+## Pattern
+
+❌ Don't:
+```typescript
+// User asks to add a new method
+export class DataConnector {
+  async getStatus(): Promise<DataConnectorStatusEntity | null> {
+    // implementation
+  }
+}
+
+// Then automatically adding tests without being asked
+describe('DataConnector', () => {
+  it('should get status from database', async () => {
+    // test implementation
+  });
+});
+```
+
+✅ Do:
+```typescript
+// User asks to add a new method
+export class DataConnector {
+  async getStatus(): Promise<DataConnectorStatusEntity | null> {
+    // implementation
+  }
+}
+
+// Wait for user to specifically request tests before adding them
+```
+
+## Rationale
+
+- Users may have specific testing requirements or preferences
+- Adding tests without being asked can clutter the codebase unnecessarily
+- Users should control when and how testing is implemented
+- Some implementations may be prototypes that don't need tests initially
+- Testing strategies may vary depending on the context and user requirements
+
+## When Tests ARE Appropriate
+
+- User explicitly asks for tests
+- User mentions testing in their request
+- User asks to "test" or "add tests for" functionality
+- User provides specific testing requirements
+
+## File Pattern
+
+`**/*.ts`, `**/*.tsx`, `**/*.test.ts`, `**/*.test.tsx`

@@ -1,0 +1,86 @@
+---
+description: Use double-quotes for string literals in TypeScript and JavaScript
+globs: 
+alwaysApply: true
+---
+# Use Double-Quotes for String Literals
+
+## Description
+
+Always use double-quotes for string literals in TypeScript and JavaScript code. This ensures consistency across the codebase and aligns with the project's linting configuration.
+
+## Pattern
+
+❌ Don't:
+```typescript
+const message = 'Hello world';
+const key = 'myProperty';
+const template = `Simple string without interpolation`;
+
+// In type definitions
+type MyType = {
+  [key in 'name' | 'email' | 'age']: string;
+};
+
+// Object keys (when quoted)
+const obj = {
+  'firstName': 'John',
+  'lastName': 'Doe'
+};
+```
+
+✅ Do:
+```typescript
+const message = "Hello world";
+const key = "myProperty";
+const template = "Simple string without interpolation";
+
+// In type definitions
+type MyType = {
+  [key in "name" | "email" | "age"]: string;
+};
+
+// Object keys (when quoted)
+const obj = {
+  "firstName": "John",
+  "lastName": "Doe"
+};
+```
+
+## Template Literals Exception
+
+Template literals (backticks) should only be used when:
+- String interpolation is needed: `` `Hello ${name}` ``
+- Multi-line strings are required
+- Tagged template literals are used
+
+❌ Don't:
+```typescript
+const simple = `Just a simple string`;
+const url = `https://example.com/static-path`;
+```
+
+✅ Do:
+```typescript
+const simple = "Just a simple string";
+const url = "https://example.com/static-path";
+const interpolated = `Hello ${name}!`;
+const multiline = `
+  This is a
+  multi-line string
+`;
+```
+
+## Rationale
+
+- Consistent code style across the entire project
+- Aligns with ESLint configuration and prevents linting errors
+- Easier to read and maintain when all string literals follow the same pattern
+- Reduces cognitive load when switching between files
+- Standard practice in many TypeScript/JavaScript style guides
+- Better compatibility with JSON (which requires double-quotes)
+- Avoids escaping issues when strings contain single quotes
+
+## File Pattern
+
+`**/*.ts`, `**/*.tsx`, `**/*.js`, `**/*.jsx`

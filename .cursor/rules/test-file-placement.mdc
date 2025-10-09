@@ -1,0 +1,15 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+When writing tests:
+
+* Place test files next to the module they are testing
+* Name test files as `<module>.test.ts`
+* Do not create `__tests__` directories
+* Keep tests close to the code they test for better discoverability
+
+Example:
+- For a module `user.ts`, create `user.test.ts` in the same directory
+- For a module `lib/data-loaders/plaid.ts`, create `lib/data-loaders/plaid.test.ts`
