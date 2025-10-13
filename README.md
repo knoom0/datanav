@@ -313,7 +313,7 @@ datanav/
 
 **Interested in contributing?**
 
-Please send an email to [moonk.94043@gmail.com](mailto:moonk.94043@gmail.com) to discuss how you can contribute. Whether it's:
+Please send an email to [moonk@datanav.app](mailto:moonk@datanav.app) to discuss how you can contribute. Whether it's:
 
 - 🐛 Bug fixes
 - ✨ New features
@@ -334,7 +334,7 @@ DataNav is released under the [MIT License](LICENSE). You're free to use, modify
 ## Support
 
 - **Issues**: [GitHub Issues](https://github.com/yourusername/datanav/issues)
-- **Email**: <moonk.94043@gmail.com>
+- **Email**: <moonk@datanav.app>
 
 ---
 
