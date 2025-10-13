@@ -334,7 +334,7 @@ DataNav is released under the [MIT License](LICENSE). You're free to use, modify
 ## Support
 
 - **Issues**: [GitHub Issues](https://github.com/yourusername/datanav/issues)
-- **Email**: <moonk@datanav.app>
+- **Email**: [moonk@datanav.app](mailto:moonk@datanav.app)
 
 ---
 
