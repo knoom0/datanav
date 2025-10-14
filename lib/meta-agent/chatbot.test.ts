@@ -1,22 +1,42 @@
 
+import type { DataSource } from "typeorm";
+import { vi } from "vitest";
+
 import { Chatbot } from "@/lib/meta-agent/chatbot";
 import { Project } from "@/lib/types";
 import {
-  setupTestDatabase,
-  teardownTestDatabase,
-  type TestDatabaseSetup
+  setupSQLiteTestDatabase,
+  teardownSQLiteTestDatabase
 } from "@/lib/util/test-util";
 
+let sqliteDataSource: DataSource | null = null;
+
+vi.mock("@/lib/data/entities", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/data/entities")>(
+    "@/lib/data/entities"
+  );
+
+  return {
+    ...actual,
+    getUserDataSource: vi.fn(async () => {
+      if (!sqliteDataSource) {
+        throw new Error("SQLite test database not initialized");
+      }
+      return sqliteDataSource;
+    })
+  };
+});
+
 describe("Chatbot", () => {
-  let testDbSetup: TestDatabaseSetup;
   let project: Project;
 
   beforeAll(async () => {
-    testDbSetup = await setupTestDatabase();
+    sqliteDataSource = await setupSQLiteTestDatabase();
   }, 60000);
 
   afterAll(async () => {
-    await teardownTestDatabase(testDbSetup);
+    await teardownSQLiteTestDatabase();
+    sqliteDataSource = null;
   });
 
   beforeEach(() => {
