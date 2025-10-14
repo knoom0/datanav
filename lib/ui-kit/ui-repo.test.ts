@@ -2,7 +2,11 @@ import { DataSource } from "typeorm";
 
 import { UIBundleEntity } from "@/lib/data/entities";
 import type { UIBundle, DataSpec } from "@/lib/types";
-import { setupTestDatabase, teardownTestDatabase, type TestDatabaseSetup } from "@/lib/util/test-util";
+import {
+  setupTestDatabase,
+  teardownTestDatabase,
+  type TestDatabaseSetup
+} from "@/lib/util/test-util";
 
 function makeTestUIBundle(uuid: string): UIBundle {
   const dataSpec: DataSpec = {
@@ -92,4 +96,4 @@ describe("ui-repo", () => {
       `UIBundle with UUID ${nonExistentUuid} not found`
     );
   });
-}); 
+});

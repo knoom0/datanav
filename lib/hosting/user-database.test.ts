@@ -1,5 +1,5 @@
 import { PostgreSqlContainer, StartedPostgreSqlContainer } from "@testcontainers/postgresql";
-import { vi, beforeAll, afterAll, beforeEach, describe, it, expect } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { UserDatabaseConfig } from "@/lib/hosting/entities";
 import { setupUserDatabase, getUserDataSourceOptions } from "@/lib/hosting/user-database";

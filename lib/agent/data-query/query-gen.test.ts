@@ -5,10 +5,21 @@ import { QueryGen } from "@/lib/agent/data-query/query-gen";
 import { DEFAULT_QA_MODEL } from "@/lib/consts";
 import { DatabaseClient } from "@/lib/data/db-client";
 import { Project, PRD, DataSpec } from "@/lib/types";
-import { setupSQLiteTestDatabase, teardownSQLiteTestDatabase, getSQLiteTestDataSource } from "@/lib/util/test-util";
+import {
+  describeIf,
+  envVarsCondition,
+  setupSQLiteTestDatabase,
+  teardownSQLiteTestDatabase,
+  getSQLiteTestDataSource
+} from "@/lib/util/test-util";
 
 
-describe("QueryGen", () => {
+const requiredEnvVars = ["OPENAI_API_KEY"];
+
+describeIf(
+  "QueryGen",
+  () => envVarsCondition("QueryGen", requiredEnvVars),
+  () => {
   let project: Project;
   let dbClient: DatabaseClient;
   const model = DEFAULT_QA_MODEL;
@@ -113,4 +124,5 @@ Create a simple user dashboard to display basic user information.
       expect(result).toBeTruthy();
     }
   }, 60000);
-});
+  }
+);

@@ -1,7 +1,11 @@
 
 import { Chatbot } from "@/lib/meta-agent/chatbot";
 import { Project } from "@/lib/types";
-import { setupTestDatabase, teardownTestDatabase, type TestDatabaseSetup } from "@/lib/util/test-util";
+import {
+  setupTestDatabase,
+  teardownTestDatabase,
+  type TestDatabaseSetup
+} from "@/lib/util/test-util";
 
 describe("Chatbot", () => {
   let testDbSetup: TestDatabaseSetup;

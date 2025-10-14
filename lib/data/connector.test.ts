@@ -5,7 +5,11 @@ import { DataConnector, DataConnectorConfig } from "@/lib/data/connector";
 import { DatabaseClient } from "@/lib/data/db-client";
 import { DataConnectorStatusEntity, DataTableStatusEntity } from "@/lib/data/entities";
 import { DataLoader } from "@/lib/data/loader";
-import { setupTestDatabase, teardownTestDatabase, type TestDatabaseSetup } from "@/lib/util/test-util";
+import {
+  setupTestDatabase,
+  teardownTestDatabase,
+  type TestDatabaseSetup
+} from "@/lib/util/test-util";
 
 
 // Mock DataLoader implementation

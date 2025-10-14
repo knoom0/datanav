@@ -4,7 +4,11 @@ import { DataCatalog } from "@/lib/data/catalog";
 import { DataConnectorConfig } from "@/lib/data/connector";
 import { DataConnectorStatusEntity } from "@/lib/data/entities";
 import { DataConnectorTool, type AskToConnectResult } from "@/lib/data/tool";
-import { setupTestDatabase, teardownTestDatabase, type TestDatabaseSetup } from "@/lib/util/test-util";
+import {
+  setupTestDatabase,
+  teardownTestDatabase,
+  type TestDatabaseSetup
+} from "@/lib/util/test-util";
 
 
 // Mock connector config for testing

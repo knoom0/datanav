@@ -1,7 +1,13 @@
 import { GEval } from "@/lib/agent/core/g-eval";
 import { DEFAULT_QA_MODEL } from "@/lib/consts";
+import { describeIf, envVarsCondition } from "@/lib/util/test-util";
 
-describe("GEval", () => {
+const requiredEnvVars = ["OPENAI_API_KEY"];
+
+describeIf(
+  "GEval",
+  () => envVarsCondition("GEval", requiredEnvVars),
+  () => {
   describe("constructor", () => {
     it("should initialize with default values", () => {
       const geval = new GEval({
@@ -207,4 +213,5 @@ describe("GEval", () => {
       expect(result.score).toBeLessThanOrEqual(1);
     }, 30000);
   });
-}); 
+  }
+);

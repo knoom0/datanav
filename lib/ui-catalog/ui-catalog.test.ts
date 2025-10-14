@@ -2,17 +2,21 @@ import { DataSource } from "typeorm";
 
 import { ComponentInfoEntity } from "@/lib/data/entities";
 import { ComponentInfo } from "@/lib/types";
-import { 
-  saveComponentInfo, 
-  ComponentInfoSaveTool, 
-  getAllComponentInfo, 
-  getComponentInfoByName, 
-  searchComponentInfo, 
+import {
+  saveComponentInfo,
+  ComponentInfoSaveTool,
+  getAllComponentInfo,
+  getComponentInfoByName,
+  searchComponentInfo,
   getSearchComponentCount,
-  getPackageNames, 
-  UICatalogTool 
+  getPackageNames,
+  UICatalogTool
 } from "@/lib/ui-catalog/ui-catalog";
-import { setupTestDatabase, teardownTestDatabase, type TestDatabaseSetup } from "@/lib/util/test-util";
+import {
+  setupTestDatabase,
+  teardownTestDatabase,
+  type TestDatabaseSetup
+} from "@/lib/util/test-util";
 
 describe("Component Database Tests", () => {
   let testDbSetup: TestDatabaseSetup;
@@ -696,4 +700,4 @@ describe("Component Database Tests", () => {
       expect(result.message).toContain("Found 1 component(s) matching \"button\"");
     });
   });
-}); 
+});

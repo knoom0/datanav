@@ -1,6 +1,6 @@
 import { PostgreSqlContainer, StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { DataSource } from "typeorm";
-import { beforeAll, afterAll, describe, it, expect } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { createSchemaIfNotExist } from "@/lib/util/db-util";
 

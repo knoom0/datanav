@@ -6,7 +6,13 @@ import { DataConnector, DataLoadResult } from "@/lib/data/connector";
 import youtubeConfig from "@/lib/data/connector-config/youtube/config";
 import { DatabaseClient } from "@/lib/data/db-client";
 import { DataConnectorStatusEntity, DataTableStatusEntity } from "@/lib/data/entities";
-import { setupTestDatabase, teardownTestDatabase, type TestDatabaseSetup } from "@/lib/util/test-util";
+import {
+  describeIf,
+  envVarsCondition,
+  setupTestDatabase,
+  teardownTestDatabase,
+  type TestDatabaseSetup
+} from "@/lib/util/test-util";
 
 // Create mock functions that can be referenced
 const mockYoutubeListFn = vi.fn();
@@ -29,7 +35,12 @@ vi.mock("googleapis", () => ({
   },
 }));
 
-describe("YouTube DataConnector Integration Tests", () => {
+const requiredEnvVars = ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"];
+
+describeIf(
+  "YouTube DataConnector Integration Tests",
+  () => envVarsCondition("YouTube DataConnector Integration Tests", requiredEnvVars),
+  () => {
   let testDbSetup: TestDatabaseSetup;
   let testDataSource: DataSource;
   let connector: DataConnector;
@@ -252,5 +263,6 @@ describe("YouTube DataConnector Integration Tests", () => {
       expect(status?.isConnected).toBe(true);
     });
   });
-});
+  }
+);
 
