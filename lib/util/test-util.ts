@@ -1,7 +1,7 @@
 import { PostgreSqlContainer, StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { createUIMessageStream, type ModelMessage, type UIMessageStreamWriter } from "ai";
-import { describe } from "vitest";
 import { DataSource, type DataSourceOptions } from "typeorm";
+import { describe } from "vitest";
 
 import { agentStreamToMessage, type EvoAgentBase, type IterationResult } from "@/lib/agent/core/agent";
 import { ENTITIES, SCHEMA_NAME } from "@/lib/data/entities";
