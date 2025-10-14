@@ -8,6 +8,7 @@ import { agentStreamToMessage } from "@/lib/agent/core/agent";
 import { DesignGen } from "@/lib/agent/designing/design-gen";
 import { DEFAULT_QA_MODEL } from "@/lib/consts";
 import { Project, PRD, Design, ProjectConfig } from "@/lib/types";
+import { describeIf, envVarsCondition } from "@/lib/util/test-util";
 
 /**
  * Helper function to read a test image as ArrayBuffer
@@ -18,22 +19,27 @@ function readTestImageFile(filename: string): ArrayBuffer {
   return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
 }
 
-describe("DesignGen", () => {
-  const model = DEFAULT_QA_MODEL;
-  let project: Project;
-  let projectConfig: ProjectConfig;
+const requiredEnvVars = ["OPENAI_API_KEY"];
 
-  beforeEach(() => {
-    project = new Project("test-design-project");
-    projectConfig = {
-      screenSize: { width: 375, height: 812 },
-      deviceType: "mobile",
-      designRefImage: readTestImageFile("design_ref.png")
-    };
-  });
+describeIf(
+  "DesignGen",
+  () => envVarsCondition("DesignGen", requiredEnvVars),
+  () => {
+    const model = DEFAULT_QA_MODEL;
+    let project: Project;
+    let projectConfig: ProjectConfig;
 
-  describe("iterate method", () => {
-    it("should throw error if project has no PRD", async () => {
+    beforeEach(() => {
+      project = new Project("test-design-project");
+      projectConfig = {
+        screenSize: { width: 375, height: 812 },
+        deviceType: "mobile",
+        designRefImage: readTestImageFile("design_ref.png")
+      };
+    });
+
+    describe("iterate method", () => {
+      it("should throw error if project has no PRD", async () => {
       const designGen = new DesignGen({
         model,
         project,
@@ -61,7 +67,7 @@ describe("DesignGen", () => {
       expect(error.message).toContain("A project must have a PRD artifact");
     });
 
-    it("should generate design images based on PRD requirements", async () => {
+      it("should generate design images based on PRD requirements", async () => {
       // Add a PRD to the project
       const prd: PRD = {
         type: "prd",
@@ -146,6 +152,7 @@ A single screen that displays product information and allows users to add items 
         expect(image.description).toBeTruthy();
         expect(typeof image.description).toBe("string");
       });
-    }, 300_000);
-  });
-});
+      }, 300_000);
+    });
+  }
+);

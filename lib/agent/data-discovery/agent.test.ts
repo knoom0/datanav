@@ -6,9 +6,21 @@ import { DatabaseClient } from "@/lib/data/db-client";
 import logger from "@/lib/logger";
 import { Project } from "@/lib/types";
 import { simulateUserConnection, simulateUserDecline, clearConnectorStatus } from "@/lib/util/db-util";
-import { setupTestDatabase, teardownTestDatabase, executeAgentIteration, type TestDatabaseSetup } from "@/lib/util/test-util";
+import {
+  describeIf,
+  envVarsCondition,
+  setupTestDatabase,
+  teardownTestDatabase,
+  executeAgentIteration,
+  type TestDatabaseSetup
+} from "@/lib/util/test-util";
 
-describe("DataDiscoveryAgent", () => {
+const requiredEnvVars = ["OPENAI_API_KEY"];
+
+describeIf(
+  "DataDiscoveryAgent",
+  () => envVarsCondition("DataDiscoveryAgent", requiredEnvVars),
+  () => {
   let dbClient: DatabaseClient;
   let dataCatalog: DataCatalog;
   let testDbSetup: TestDatabaseSetup;
@@ -172,4 +184,5 @@ describe("DataDiscoveryAgent", () => {
     expect(result.nextAction).toBeDefined();
     expect(result.nextAction?.agentAction).toBe("stop");
   }, 30000);
-});
+  }
+);

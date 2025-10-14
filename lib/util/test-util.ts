@@ -1,6 +1,7 @@
 import { PostgreSqlContainer, StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { createUIMessageStream, type ModelMessage, type UIMessageStreamWriter } from "ai";
 import { DataSource, type DataSourceOptions } from "typeorm";
+import { describe } from "vitest";
 
 import { agentStreamToMessage, type EvoAgentBase, type IterationResult } from "@/lib/agent/core/agent";
 import { ENTITIES, SCHEMA_NAME } from "@/lib/data/entities";
@@ -183,5 +184,56 @@ export function getSQLiteTestDataSource(): DataSource {
     throw new Error("SQLite test database not initialized. Call setupSQLiteTestDatabase() first.");
   }
   return sqliteTestDataSource;
+}
+
+/**
+ * Wraps a describe block and conditionally skips it when the provided predicate returns false.
+ */
+export interface DescribeIfResult {
+  run: boolean;
+  reason?: string;
+}
+
+type DescribeIfCondition = () => boolean | DescribeIfResult;
+
+function normalizeResult(result: boolean | DescribeIfResult): DescribeIfResult {
+  return typeof result === "boolean" ? { run: result } : result;
+}
+
+export function describeIf(
+  suiteName: string,
+  condition: DescribeIfCondition,
+  suiteFn: Parameters<typeof describe>[1]
+): void {
+  const { run, reason } = normalizeResult(condition());
+
+  if (!run) {
+    if (reason) {
+      console.warn(reason);
+    }
+    describe.skip(suiteName, suiteFn);
+    return;
+  }
+
+  describe(suiteName, suiteFn);
+}
+
+/**
+ * Helper condition that ensures required environment variables are present.
+ */
+export function envVarsCondition(
+  suiteName: string,
+  requiredEnvVars: string[]
+): boolean | DescribeIfResult {
+  const missingEnvVars = requiredEnvVars.filter(name => !process.env[name]);
+
+  if (missingEnvVars.length > 0) {
+    return {
+      run: false,
+      reason: `Skipping ${suiteName} because missing environment variables: ${missingEnvVars.join(", ")}`
+    };
+  }
+
+  return true;
 }
 

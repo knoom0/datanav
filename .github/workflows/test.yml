@@ -20,6 +20,11 @@ jobs:
           node-version: 20
           cache: npm
 
+      - name: Ensure Docker is running
+        run: |
+          sudo service docker start
+          docker info
+
       - name: Install dependencies
         run: npm ci
 
