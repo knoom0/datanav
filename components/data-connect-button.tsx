@@ -20,10 +20,14 @@ const isMobileDevice = () => {
 
 interface DataConnectButtonProps {
   connectorId: string;
+  onConnectStart?: () => void;
+  onConnectComplete?: (result: any) => void;
 }
 
 export function DataConnectButton({ 
-  connectorId
+  connectorId,
+  onConnectStart,
+  onConnectComplete
 }: DataConnectButtonProps) {
   const [connector, setConnector] = useState<DataConnectorInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -205,6 +209,9 @@ export function DataConnectButton({
     setIsHandlingAction(true);
     setError(null);
 
+    // Call onConnectStart callback if provided
+    onConnectStart?.();
+
     try {
       const response = await fetch(`/api/data/${connectorId}/connect`, {
         method: "POST",
@@ -220,6 +227,9 @@ export function DataConnectButton({
       }
 
       const result = await response.json();
+      
+      // Call onConnectComplete callback if provided
+      onConnectComplete?.(result);
       
       // Check if we need to handle OAuth flow
       if (!result.success && result.authInfo?.authUrl) {

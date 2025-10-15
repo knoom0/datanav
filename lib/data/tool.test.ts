@@ -57,7 +57,8 @@ describe("DataConnectorTool", () => {
           description: "Test connector for unit testing",
           isConnected: false,
           isLoading: false,
-          lastLoadedAt: null
+          lastLoadedAt: null,
+          dataJobId: null
         }]
       });
     });
