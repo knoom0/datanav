@@ -6,7 +6,13 @@ import { DataConnector, DataLoadResult } from "@/lib/data/connector";
 import gmailConfig from "@/lib/data/connector-config/gmail/config";
 import { DatabaseClient } from "@/lib/data/db-client";
 import { DataConnectorStatusEntity, DataTableStatusEntity } from "@/lib/data/entities";
-import { setupTestDatabase, teardownTestDatabase, type TestDatabaseSetup } from "@/lib/util/test-util";
+import {
+  describeIf,
+  envVarsCondition,
+  setupTestDatabase,
+  teardownTestDatabase,
+  type TestDatabaseSetup
+} from "@/lib/util/test-util";
 
 // Create mock functions that can be referenced
 const mockGmailListFn = vi.fn();
@@ -38,7 +44,12 @@ vi.mock("@jrmdayn/googleapis-batcher", () => ({
   batchFetchImplementation: vi.fn(() => vi.fn()),
 }));
 
-describe("Gmail DataConnector Integration Tests", () => {
+const requiredEnvVars = ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"];
+
+describeIf(
+  "Gmail DataConnector Integration Tests",
+  () => envVarsCondition("Gmail DataConnector Integration Tests", requiredEnvVars),
+  () => {
   let testDbSetup: TestDatabaseSetup;
   let testDataSource: DataSource;
   let connector: DataConnector;
@@ -255,4 +266,5 @@ describe("Gmail DataConnector Integration Tests", () => {
       expect(status?.isConnected).toBe(true);
     });
   });
-});
+  }
+);

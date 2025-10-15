@@ -3,7 +3,11 @@ import { DataSource } from "typeorm";
 
 import { DataTableStatusEntity } from "@/lib/data/entities";
 import { DataWriter } from "@/lib/data/writer";
-import { setupTestDatabase, teardownTestDatabase, type TestDatabaseSetup } from "@/lib/util/test-util";
+import {
+  setupTestDatabase,
+  teardownTestDatabase,
+  type TestDatabaseSetup
+} from "@/lib/util/test-util";
 
 
 // Note: entities module is not mocked - DataWriter receives DataSource directly in constructor

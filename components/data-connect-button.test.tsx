@@ -52,7 +52,7 @@ describe("DataConnectButton", () => {
 
     expect(screen.getByText("Connect to Google Calendar for event data")).toBeInTheDocument();
     expect(screen.getByText("Not Connected")).toBeInTheDocument();
-    expect(screen.getByText("Last loaded: Never")).toBeInTheDocument();
+    expect(screen.getByText("Never loaded")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /connect/i })).toBeInTheDocument();
   });
 

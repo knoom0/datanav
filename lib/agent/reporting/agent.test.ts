@@ -4,9 +4,20 @@ import { vi } from "vitest";
 import { ReportingAgent } from "@/lib/agent/reporting/agent";
 import { DatabaseClient } from "@/lib/data/db-client";
 import { Project } from "@/lib/types";
-import { setupTestDatabase, teardownTestDatabase, type TestDatabaseSetup } from "@/lib/util/test-util";
+import {
+  describeIf,
+  envVarsCondition,
+  setupTestDatabase,
+  teardownTestDatabase,
+  type TestDatabaseSetup
+} from "@/lib/util/test-util";
 
-describe("ReportingAgent", () => {
+const requiredEnvVars = ["OPENAI_API_KEY"];
+
+describeIf(
+  "ReportingAgent",
+  () => envVarsCondition("ReportingAgent", requiredEnvVars),
+  () => {
   let testDbSetup: TestDatabaseSetup;
   let testDataSource: DataSource;
   let dbClient: DatabaseClient;
@@ -75,4 +86,5 @@ describe("ReportingAgent", () => {
       expect(dataSpecArtifact?.type).toBe("data_spec");
     });
   });
-});
+  }
+);
