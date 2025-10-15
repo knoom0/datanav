@@ -88,6 +88,7 @@ export interface DataConnectorInfo {
   isLoading: boolean;
   lastLoadedAt: Date | null;
   dataJobId: string | null;
+  lastDataJob: DataJobInfo | null;
 }
 
 /**

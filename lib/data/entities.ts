@@ -98,6 +98,9 @@ export class DataConnectorStatusEntity extends BaseEntity {
   @Column({ type: "varchar", nullable: true })
     dataJobId!: string | null;
 
+  @Column({ type: "varchar", nullable: true })
+    lastDataJobId!: string | null;
+
   @Column({ type: Date, nullable: true })
     askedToConnectUntil!: Date | null;
 
@@ -132,7 +135,7 @@ export class DataTableStatusEntity extends BaseEntity {
 
 @Entity({ name: "data_spec", schema: SCHEMA_NAME })
 export class DataSpecEntity extends BaseEntity {
-  @PrimaryColumn()
+  @PrimaryColumn({ type: "varchar" })
     projectId!: string;
 
   @Column({ 
@@ -162,9 +165,6 @@ export class DataJobEntity extends BaseEntity {
   @Column({ type: "varchar", nullable: true })
     result!: "success" | "error" | "canceled" | null;
 
-  @Column({ type: "integer", default: 0 })
-    runTimeMs!: number;
-
   @Column({ type: "json", nullable: true })
     params!: Record<string, any> | null;
 
@@ -176,6 +176,12 @@ export class DataJobEntity extends BaseEntity {
       updatedRecordCount: number;
       [key: string]: any;
     } | null;
+
+  @Column({ type: Date, nullable: true })
+    startedAt!: Date | null;
+
+  @Column({ type: Date, nullable: true })
+    finishedAt!: Date | null;
 
   @CreateDateColumn()
     createdAt!: Date;

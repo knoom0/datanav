@@ -46,9 +46,13 @@ class MockDataConnector {
     return status;
   }
 
-  async updateStatus(params: { dataJobId?: string | null; isLoading?: boolean }): Promise<void> {
-    // Mock implementation - just log for testing
-    console.log("Mock updateStatus called with:", params);
+  async updateStatus(params: { 
+    dataJobId?: string | null; 
+    isLoading?: boolean;
+    lastDataJobId?: string | null;
+  }): Promise<void> {
+    // Mock implementation - output for test visibility
+    process.stdout.write(`Mock updateStatus called with: ${JSON.stringify(params)}\n`);
   }
 }
 
@@ -110,16 +114,17 @@ describe("DataJobScheduler", () => {
       expect(jobId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
 
       // Verify the job was created correctly
-      const job = await scheduler.get(jobId);
+      const job = await scheduler.get({ id: jobId });
       expect(job).not.toBeNull();
       expect(job?.dataConnectorId).toBe("test.connector");
       expect(job?.type).toBe(JobType.LOAD);
       expect(job?.state).toBe(JobState.CREATED);
       expect(job?.result).toBeNull();
-      expect(job?.runTimeMs).toBe(0);
       expect(job?.params).toEqual({});
       expect(job?.syncContext).toBeNull();
       expect(job?.progress).toBeNull();
+      expect(job?.startedAt).toBeNull();
+      expect(job?.finishedAt).toBeNull();
       expect(job?.createdAt).toBeInstanceOf(Date);
       expect(job?.updatedAt).toBeInstanceOf(Date);
     });
@@ -131,7 +136,7 @@ describe("DataJobScheduler", () => {
         params: { foo: "bar", count: 42 }
       });
 
-      const job = await scheduler.get(jobId);
+      const job = await scheduler.get({ id: jobId });
       expect(job?.type).toBe("custom");
       expect(job?.params).toEqual({ foo: "bar", count: 42 });
     });
@@ -147,26 +152,79 @@ describe("DataJobScheduler", () => {
 
       expect(jobId1).not.toBe(jobId2);
 
-      const jobs = await scheduler.getByConnector("test.connector");
+      const jobs = await scheduler.getByConnector({ dataConnectorId: "test.connector" });
       expect(jobs).toHaveLength(2);
       expect(jobs.map(j => j.id).sort()).toEqual([jobId1, jobId2].sort());
+    });
+
+    it("should cancel existing unfinished jobs when creating a new job for the same connector", async () => {
+      // Create first job
+      const jobId1 = await scheduler.create({
+        dataConnectorId: "test.connector"
+      });
+
+      // Verify first job exists and is in created state
+      const job1 = await scheduler.get({ id: jobId1 });
+      expect(job1?.state).toBe(JobState.CREATED);
+
+      // Create second job for the same connector
+      const jobId2 = await scheduler.create({
+        dataConnectorId: "test.connector"
+      });
+
+      // Verify first job was canceled
+      const canceledJob = await scheduler.get({ id: jobId1 });
+      expect(canceledJob?.state).toBe(JobState.FINISHED);
+      expect(canceledJob?.result).toBe(JobResult.CANCELED);
+
+      // Verify second job is in created state
+      const job2 = await scheduler.get({ id: jobId2 });
+      expect(job2?.state).toBe(JobState.CREATED);
+    });
+
+    it("should cancel running jobs when creating a new job for the same connector", async () => {
+      // Create and start running a job
+      const jobId1 = await scheduler.create({
+        dataConnectorId: "test.connector"
+      });
+      await scheduler.run({ id: jobId1 });
+
+      // Verify job is running
+      const runningJob = await scheduler.get({ id: jobId1 });
+      expect(runningJob?.state).toBe(JobState.RUNNING);
+
+      // Create a new job for the same connector
+      const jobId2 = await scheduler.create({
+        dataConnectorId: "test.connector"
+      });
+
+      // Verify first job was canceled
+      const canceledJob = await scheduler.get({ id: jobId1 });
+      expect(canceledJob?.state).toBe(JobState.FINISHED);
+      expect(canceledJob?.result).toBe(JobResult.CANCELED);
+
+      // Verify second job is in created state
+      const job2 = await scheduler.get({ id: jobId2 });
+      expect(job2?.state).toBe(JobState.CREATED);
     });
   });
 
   describe("runJob", () => {
-    it("should run a job and update its state to finished with success result", async () => {
+    it("should run a job and set it to running state when not finished", async () => {
       const jobId = await scheduler.create({
         dataConnectorId: "test.connector"
       });
 
-      const result = await scheduler.run(jobId);
+      // Since scheduler always uses maxJobDurationMs, the mock will return isFinished: false
+      const result = await scheduler.run({ id: jobId });
 
       expect(result.job.id).toBe(jobId);
-      expect(result.job.state).toBe(JobState.FINISHED);
-      expect(result.job.result).toBe(JobResult.SUCCESS);
-      expect(result.job.runTimeMs).toBeGreaterThan(0);
+      expect(result.job.state).toBe(JobState.RUNNING);
+      expect(result.job.result).toBeNull();
+      expect(result.job.startedAt).toBeInstanceOf(Date);
+      expect(result.job.finishedAt).toBeNull();
       expect(result.job.progress).toEqual({ updatedRecordCount: 100 });
-      expect(result.nextJobIds).toEqual([]);
+      expect(result.nextJobIds).toEqual([jobId]);
 
       // Verify the connector's load method was called
       const connector = mockConnectors.get("test.connector")!;
@@ -178,11 +236,12 @@ describe("DataJobScheduler", () => {
         dataConnectorId: "test.connector"
       });
 
-      const result = await scheduler.run(jobId);
+      const result = await scheduler.run({ id: jobId });
 
       expect(result.job.id).toBe(jobId);
-      expect(result.job.state).toBe(JobState.FINISHED);
-      expect(result.job.result).toBe(JobResult.SUCCESS);
+      // Job will be in running state since scheduler uses maxJobDurationMs
+      expect(result.job.state).toBe(JobState.RUNNING);
+      expect(result.job.result).toBeNull();
 
       // Verify the progress callback was called
       const connector = mockConnectors.get("test.connector")!;
@@ -190,7 +249,7 @@ describe("DataJobScheduler", () => {
     });
 
     it("should throw error for non-existent job", async () => {
-      await expect(scheduler.run("00000000-0000-0000-0000-000000000000"))
+      await expect(scheduler.run({ id: "00000000-0000-0000-0000-000000000000" }))
         .rejects
         .toThrow("Job 00000000-0000-0000-0000-000000000000 not found");
     });
@@ -201,32 +260,46 @@ describe("DataJobScheduler", () => {
       });
 
       // Test with string job ID
-      const result = await scheduler.run(jobId.toString());
+      const result = await scheduler.run({ id: jobId.toString() });
 
       expect(result.job.id).toBe(jobId);
-      expect(result.job.state).toBe(JobState.FINISHED);
-      expect(result.job.result).toBe(JobResult.SUCCESS);
+      // Since scheduler uses maxJobDurationMs, job will be in running state
+      expect(result.job.state).toBe(JobState.RUNNING);
+      expect(result.job.result).toBeNull();
     });
 
-    it("should throw error for invalid string job ID", async () => {
-      await expect(scheduler.run("invalid"))
+    it("should return null for invalid job ID", async () => {
+      // Without validation, invalid job IDs just return not found
+      await expect(scheduler.run({ id: "invalid" }))
         .rejects
-        .toThrow("Invalid job ID: invalid");
+        .toThrow("Job invalid not found");
     });
 
-    it("should throw error for non-existent connector", async () => {
-      const jobId = await scheduler.create({
+    it("should throw error for non-existent connector during creation", async () => {
+      // Creating a job for non-existent connector should fail immediately
+      await expect(scheduler.create({
         dataConnectorId: "non.existent.connector"
-      });
-
-      await expect(scheduler.run(jobId))
+      }))
         .rejects
         .toThrow("Connector non.existent.connector not found");
+    });
 
-      // Verify job state was updated to finished with error result
-      const job = await scheduler.get(jobId);
-      expect(job?.state).toBe(JobState.FINISHED);
-      expect(job?.result).toBe(JobResult.ERROR);
+    it("should throw error when trying to run an already finished job", async () => {
+      const jobId = await scheduler.create({
+        dataConnectorId: "test.connector"
+      });
+
+      // Manually mark the job as finished
+      const jobRepo = (scheduler as any).dataSource.getRepository(DataJobEntity);
+      const job = await jobRepo.findOne({ where: { id: jobId } });
+      job.state = JobState.FINISHED;
+      job.result = JobResult.SUCCESS;
+      await jobRepo.save(job);
+
+      // Try to run the finished job
+      await expect(scheduler.run({ id: jobId }))
+        .rejects
+        .toThrow(`Job ${jobId} is already finished with result: success`);
     });
 
     it("should pass maxDurationToRun to connector load method", async () => {
@@ -234,74 +307,75 @@ describe("DataJobScheduler", () => {
         dataConnectorId: "test.connector"
       });
 
-      const maxDuration = 5000;
-      await scheduler.run(jobId, maxDuration);
+      await scheduler.run({ id: jobId });
 
       // Verify the connector received the max duration parameter
       const connector = mockConnectors.get("test.connector")!;
       expect((connector as any).loadCallCount).toBe(1);
     });
 
-    it("should return same job ID when maxDurationToRun is specified and sync context exists", async () => {
+    it("should return same job ID when job is not finished and sync context exists", async () => {
       const jobId = await scheduler.create({
         dataConnectorId: "test.connector"
       });
 
-      const maxDuration = 5000;
-      const result = await scheduler.run(jobId, maxDuration);
+      // Since scheduler always uses maxJobDurationMs from config, mock will return isFinished: false
+      const result = await scheduler.run({ id: jobId });
 
       // Should return the same job ID to continue running
       expect(result.nextJobIds).toHaveLength(1);
       expect(result.nextJobIds[0]).toBe(jobId);
 
       // Verify the job is still in running state
-      const job = await scheduler.get(jobId);
+      const job = await scheduler.get({ id: jobId });
       expect(job?.state).toBe(JobState.RUNNING);
       expect(job?.result).toBeNull();
-      expect(job?.runTimeMs).toBeGreaterThan(0);
+      expect(job?.startedAt).toBeInstanceOf(Date);
+      expect(job?.finishedAt).toBeNull();
       expect(job?.progress).toEqual({ updatedRecordCount: 100 });
     });
 
-    it("should finish job when maxDurationToRun is not specified", async () => {
+    it("should continue running job when more data exists", async () => {
       const jobId = await scheduler.create({
         dataConnectorId: "test.connector"
       });
 
-      const result = await scheduler.run(jobId);
+      // Scheduler always uses maxJobDurationMs from config, so job will continue
+      const result = await scheduler.run({ id: jobId });
 
-      // Should not continue running
-      expect(result.nextJobIds).toEqual([]);
-      expect(result.job.state).toBe(JobState.FINISHED);
-      expect(result.job.result).toBe(JobResult.SUCCESS);
+      // Should continue running since mock returns isFinished: false when maxDuration is set
+      expect(result.nextJobIds).toEqual([jobId]);
+      expect(result.job.state).toBe(JobState.RUNNING);
+      expect(result.job.result).toBeNull();
     });
 
-    it("should update sync context and accumulate runTimeMs across multiple runs", async () => {
+    it("should update sync context across multiple runs", async () => {
       const jobId = await scheduler.create({
         dataConnectorId: "test.connector"
       });
 
-      const maxDuration = 5000;
-      const result1 = await scheduler.run(jobId, maxDuration);
+      const result1 = await scheduler.run({ id: jobId });
 
       // Verify sync context was updated and job is still running
       expect(result1.job.syncContext).toEqual({ pageToken: "page_1" });
       expect(result1.job.state).toBe(JobState.RUNNING);
       expect(result1.nextJobIds).toEqual([jobId]);
       expect(result1.job.progress).toEqual({ updatedRecordCount: 100 });
-      const firstRunTime = result1.job.runTimeMs;
-      expect(firstRunTime).toBeGreaterThanOrEqual(0);
+      expect(result1.job.startedAt).toBeInstanceOf(Date);
+      expect(result1.job.finishedAt).toBeNull();
 
       // Run the job again
-      const result2 = await scheduler.run(jobId, maxDuration);
+      const result2 = await scheduler.run({ id: jobId });
       
-      // Verify runTimeMs accumulated (should be at least as much as first run, typically more)
-      expect(result2.job.runTimeMs).toBeGreaterThanOrEqual(firstRunTime);
+      // Verify sync context was updated again and job still running
       expect(result2.job.syncContext).toEqual({ pageToken: "page_2" });
       expect(result2.job.state).toBe(JobState.RUNNING);
       expect(result2.job.progress).toEqual({ updatedRecordCount: 200 });
+      expect(result2.job.startedAt).toBeInstanceOf(Date);
+      expect(result2.job.finishedAt).toBeNull();
     });
 
-    it("should handle failed job and update state", async () => {
+    it("should return gracefully when job fails and update state to error", async () => {
       const jobId = await scheduler.create({
         dataConnectorId: "test.connector"
       });
@@ -313,15 +387,40 @@ describe("DataJobScheduler", () => {
         throw new Error("Simulated load error");
       };
 
-      await expect(scheduler.run(jobId))
-        .rejects
-        .toThrow("Simulated load error");
+      // The scheduler.run should return gracefully without throwing
+      const result = await scheduler.run({ id: jobId });
 
-      // Verify job state was updated to finished with error result
-      const job = await scheduler.get(jobId);
-      expect(job?.state).toBe(JobState.FINISHED);
-      expect(job?.result).toBe(JobResult.ERROR);
-      expect(job?.runTimeMs).toBeGreaterThan(0);
+      // Verify it returned a result with the failed job
+      expect(result.job.id).toBe(jobId);
+      expect(result.job.state).toBe(JobState.FINISHED);
+      expect(result.job.result).toBe(JobResult.ERROR);
+      expect(result.job.startedAt).toBeInstanceOf(Date);
+      expect(result.job.finishedAt).toBeInstanceOf(Date);
+      expect(result.nextJobIds).toEqual([]);
+
+      // Restore original load method
+      connector.load = originalLoad;
+    });
+
+    it("should handle database errors gracefully (e.g., invalid dates)", async () => {
+      const jobId = await scheduler.create({
+        dataConnectorId: "test.connector"
+      });
+
+      // Make the mock connector throw a database error similar to production
+      const connector = mockConnectors.get("test.connector")!;
+      const originalLoad = connector.load.bind(connector);
+      connector.load = async () => {
+        throw new Error("date/time field value out of range: \"0000-12-31T00:00:00.000Z\"");
+      };
+
+      // The scheduler.run should return gracefully without throwing
+      const result = await scheduler.run({ id: jobId });
+
+      // Verify job state was updated correctly
+      expect(result.job.state).toBe(JobState.FINISHED);
+      expect(result.job.result).toBe(JobResult.ERROR);
+      expect(result.nextJobIds).toEqual([]);
 
       // Restore original load method
       connector.load = originalLoad;
@@ -339,12 +438,12 @@ describe("DataJobScheduler", () => {
       const originalLoad = connector.load.bind(connector);
       connector.load = async (params: { maxDurationToRunMs?: number; onProgressUpdate?: (params: { updatedRecordCount: number }) => void | Promise<void> } = {}) => {
         // Check job state while running
-        const job = await scheduler.get(jobId);
+        const job = await scheduler.get({ id: jobId });
         jobStateWhileRunning = job?.state;
         return originalLoad(params);
       };
 
-      await scheduler.run(jobId);
+      await scheduler.run({ id: jobId });
 
       expect(jobStateWhileRunning).toBe(JobState.RUNNING);
 
@@ -355,7 +454,7 @@ describe("DataJobScheduler", () => {
 
   describe("getJob", () => {
     it("should return null for non-existent job", async () => {
-      const job = await scheduler.get("00000000-0000-0000-0000-000000000000");
+      const job = await scheduler.get({ id: "00000000-0000-0000-0000-000000000000" });
       expect(job).toBeNull();
     });
 
@@ -365,7 +464,7 @@ describe("DataJobScheduler", () => {
         params: { test: "value" }
       });
 
-      const job = await scheduler.get(jobId);
+      const job = await scheduler.get({ id: jobId });
       expect(job).not.toBeNull();
       expect(job?.id).toBe(jobId);
       expect(job?.dataConnectorId).toBe("test.connector");
@@ -378,23 +477,23 @@ describe("DataJobScheduler", () => {
         params: { test: "value" }
       });
 
-      const job = await scheduler.get(jobId.toString());
+      const job = await scheduler.get({ id: jobId.toString() });
       expect(job).not.toBeNull();
       expect(job?.id).toBe(jobId);
       expect(job?.dataConnectorId).toBe("test.connector");
       expect(job?.params).toEqual({ test: "value" });
     });
 
-    it("should throw error for invalid string job ID in get method", async () => {
-      await expect(scheduler.get("invalid"))
-        .rejects
-        .toThrow("Invalid job ID: invalid");
+    it("should return null for invalid string job ID in get method", async () => {
+      // Without validation, invalid job IDs just return null
+      const job = await scheduler.get({ id: "invalid" });
+      expect(job).toBeNull();
     });
   });
 
   describe("getJobsByConnector", () => {
     it("should return empty array when no jobs exist", async () => {
-      const jobs = await scheduler.getByConnector("test.connector");
+      const jobs = await scheduler.getByConnector({ dataConnectorId: "test.connector" });
       expect(jobs).toEqual([]);
     });
 
@@ -412,7 +511,7 @@ describe("DataJobScheduler", () => {
         dataConnectorId: "another.connector"
       });
 
-      const jobs = await scheduler.getByConnector("test.connector");
+      const jobs = await scheduler.getByConnector({ dataConnectorId: "test.connector" });
       expect(jobs).toHaveLength(2);
       expect(jobs.map(j => j.id).sort()).toEqual([jobId1, jobId2].sort());
     });
@@ -429,7 +528,7 @@ describe("DataJobScheduler", () => {
         dataConnectorId: "test.connector"
       });
 
-      const jobs = await scheduler.getByConnector("test.connector");
+      const jobs = await scheduler.getByConnector({ dataConnectorId: "test.connector" });
       expect(jobs).toHaveLength(2);
       expect(jobs[0].id).toBe(jobId2); // Newest first
       expect(jobs[1].id).toBe(jobId1);

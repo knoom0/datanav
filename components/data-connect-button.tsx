@@ -1,7 +1,7 @@
 "use client";
 
 import { Button, Paper, Text, Group, Stack, Badge, Loader, Alert, Menu, Modal } from "@mantine/core";
-import { IconPlug, IconPlugConnected, IconAlertCircle, IconClock, IconRefresh, IconDots, IconTrash } from "@tabler/icons-react";
+import { IconPlug, IconPlugConnected, IconAlertCircle, IconClock, IconRefresh, IconDots, IconTrash, IconCheck, IconX } from "@tabler/icons-react";
 import { useState, useEffect } from "react";
 
 import { DataConnectorInfo, DataJobInfo } from "@/lib/types";
@@ -311,6 +311,53 @@ export function DataConnectButton({
     });
   };
 
+  // Render last load result status
+  const renderLastLoadStatus = () => {
+    if (!connector) return null;
+    const { lastDataJob } = connector;
+    
+    if (!lastDataJob) {
+      return (
+        <Group gap="xs" align="center">
+          <IconClock size="0.9rem" style={{ color: "var(--mantine-color-dimmed)" }} />
+          <Text size="xs" c="dimmed">
+            Never loaded
+          </Text>
+        </Group>
+      );
+    }
+
+    const isSuccess = lastDataJob.result === "success";
+    const isError = lastDataJob.result === "error";
+    const isCanceled = lastDataJob.result === "canceled";
+
+    // Calculate finished time
+    const finishedAt = lastDataJob.state === "finished" && lastDataJob.runTimeMs 
+      ? new Date(new Date(lastDataJob.createdAt).getTime() + lastDataJob.runTimeMs)
+      : new Date(lastDataJob.updatedAt);
+
+    return (
+      <Stack gap={4}>
+        <Group gap="xs" align="center">
+          {isSuccess && <IconCheck size="0.9rem" style={{ color: "var(--mantine-color-green-6)" }} />}
+          {isError && <IconX size="0.9rem" style={{ color: "var(--mantine-color-red-6)" }} />}
+          {isCanceled && <IconAlertCircle size="0.9rem" style={{ color: "var(--mantine-color-yellow-6)" }} />}
+          <Text size="xs" c={isSuccess ? "green" : isError ? "red" : "yellow"} fw={500}>
+            Last load {isSuccess ? "successful" : isError ? "failed" : "canceled"}
+          </Text>
+        </Group>
+        <Group gap="xs" align="center">
+          <IconClock size="0.9rem" style={{ color: "var(--mantine-color-dimmed)" }} />
+          <Text size="xs" c="dimmed">
+            {formatLastLoaded(finishedAt)}
+            {lastDataJob.progress?.updatedRecordCount !== undefined && 
+              ` • ${formatRecordCount(lastDataJob.progress.updatedRecordCount)}`}
+          </Text>
+        </Group>
+      </Stack>
+    );
+  };
+
   // Format job type for human-friendly display
   const formatJobType = (type: string) => {
     switch (type) {
@@ -464,12 +511,7 @@ export function DataConnectButton({
             {connector.description}
           </Text>
           
-          <Group gap="xs" align="center">
-            <IconClock size="0.9rem" style={{ color: "var(--mantine-color-dimmed)" }} />
-            <Text size="xs" c="dimmed">
-              Last loaded: {formatLastLoaded(connector.lastLoadedAt)}
-            </Text>
-          </Group>
+          {renderLastLoadStatus()}
         </Stack>
 
         {error && (

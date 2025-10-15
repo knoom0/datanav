@@ -455,6 +455,7 @@ export class DataConnector {
     isLoading: boolean;
     lastLoadedAt: Date | null;
     dataJobId: string | null;
+    lastDataJobId: string | null;
   }>): Promise<void> {
     const statusRepo = this.dataSource.getRepository(DataConnectorStatusEntity);
     

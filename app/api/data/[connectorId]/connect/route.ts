@@ -57,8 +57,9 @@ async function handler(
     logger.info(`Triggering data load for connected connector: ${connectorId}`);
     
     // Call the data load API to trigger the load process synchronously
-    const baseUrl = new URL(request.url).origin;
-    const loadResult = await callInternalAPI(baseUrl, `/api/data/${connectorId}/load`, {
+    const loadResult = await callInternalAPI({
+      endpoint: `/api/data/${connectorId}/load`,
+      request,
       method: "POST",
     });
     

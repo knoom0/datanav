@@ -1,6 +1,7 @@
-import { DataSource } from "typeorm";
+import { DataSource, In } from "typeorm";
 import { v4 as uuidv4 } from "uuid";
 
+import { getConfig } from "@/lib/config";
 import { DataConnector } from "@/lib/data/connector";
 import { DataJobEntity } from "@/lib/data/entities";
 import logger from "@/lib/logger";
@@ -40,6 +41,7 @@ export interface RunJobResult {
 export class DataJobScheduler {
   private dataSource: DataSource;
   private getDataConnector: (connectorId: string) => Promise<any>;
+  private maxJobDurationMs: number;
 
   constructor(params: { 
     dataSource: DataSource;
@@ -47,38 +49,62 @@ export class DataJobScheduler {
   }) {
     this.dataSource = params.dataSource;
     this.getDataConnector = params.getDataConnector;
-  }
-
-  /**
-   * Validates job ID format (should be a valid UUID)
-   */
-  private validateJobId(id: string): void {
-    if (!id || typeof id !== "string") {
-      throw new Error(`Invalid job ID: ${id}`);
-    }
     
-    // Validate UUID format
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(id)) {
-      throw new Error(`Invalid job ID: ${id}`);
-    }
-  }
-
-  /**
-   * Updates job with run time and saves it
-   */
-  private async updateJobWithRunTime(job: DataJobEntity, startTime: number): Promise<void> {
-    job.runTimeMs += Date.now() - startTime;
-    await this.dataSource.getRepository(DataJobEntity).save(job);
+    // Get max duration from config
+    const config = getConfig();
+    this.maxJobDurationMs = config.job.maxJobDurationMs;
   }
 
   /**
    * Updates job state and result, then saves it
    */
-  private async updateJobState(job: DataJobEntity, state: JobStateType, result: JobResultType | null, startTime: number): Promise<void> {
+  private async updateJobState(params: {
+    job: DataJobEntity;
+    state: JobStateType;
+    result: JobResultType | null;
+  }): Promise<void> {
+    const { job, state, result } = params;
     job.state = state;
     job.result = result;
-    await this.updateJobWithRunTime(job, startTime);
+    await this.dataSource.getRepository(DataJobEntity).save(job);
+  }
+
+  /**
+   * Stops a job by updating its state and clearing the connector status
+   * Can be used for error, canceled, or other terminal states
+   * @param params.job - Job to stop
+   * @param params.result - The result type (error, canceled, etc.)
+   */
+  private async stopJob(params: {
+    job: DataJobEntity;
+    result: JobResultType;
+  }): Promise<void> {
+    const { job, result } = params;
+    logger.info(`Stopping job ${job.id} with result: ${result}`);
+    
+    // Set finished time
+    job.finishedAt = new Date();
+    
+    // Update job state to finished with the specified result
+    await this.updateJobState({ job, state: JobState.FINISHED, result });
+    
+    // Clear dataJobId, set isLoading to false, and save lastDataJobId on the connector
+    const connector = await this.getDataConnector(job.dataConnectorId);
+    await connector.updateStatus({ 
+      dataJobId: null, 
+      isLoading: false,
+      lastDataJobId: job.id
+    });
+    
+    logger.info(`Job ${job.id} stopped with result: ${result}`);
+  }
+
+  /**
+   * Cancels a job by marking it as canceled and clearing the connector status
+   * @param params.job - Job to cancel
+   */
+  private async cancelJob(params: { job: DataJobEntity }): Promise<void> {
+    await this.stopJob({ job: params.job, result: JobResult.CANCELED });
   }
 
   /**
@@ -93,29 +119,38 @@ export class DataJobScheduler {
     
     const jobRepo = this.dataSource.getRepository(DataJobEntity);
     
+    // Cancel any existing unfinished jobs for this connector
+    const unfinishedJobs = await jobRepo.find({
+      where: {
+        dataConnectorId,
+        state: In([JobState.CREATED, JobState.RUNNING])
+      }
+    });
+    
+    if (unfinishedJobs.length > 0) {
+      logger.info(`Canceling ${unfinishedJobs.length} existing unfinished job(s) for connector ${dataConnectorId}`);
+      for (const existingJob of unfinishedJobs) {
+        await this.cancelJob({ job: existingJob });
+      }
+    }
+    
     const job = new DataJobEntity();
     job.id = uuidv4();
     job.dataConnectorId = dataConnectorId;
     job.type = type;
     job.state = JobState.CREATED;
     job.result = null;
-    job.runTimeMs = 0;
     job.params = jobParams;
     job.syncContext = null;
     job.progress = null;
+    job.startedAt = null;
+    job.finishedAt = null;
     
     const savedJob = await jobRepo.save(job);
     
     // Update connector status with the job ID and set loading state
-    try {
-      const connector = await this.getDataConnector(dataConnectorId);
-      if (connector) {
-        await connector.updateStatus({ dataJobId: savedJob.id, isLoading: true });
-      }
-    } catch (error) {
-      logger.error(`Failed to update connector status with job ID: ${safeErrorString(error)}`);
-      // Don't throw here - the job was created successfully, status update is secondary
-    }
+    const connector = await this.getDataConnector(dataConnectorId);
+    await connector.updateStatus({ dataJobId: savedJob.id, isLoading: true });
     
     logger.info(`Created job with ID ${savedJob.id}`);
     
@@ -124,14 +159,12 @@ export class DataJobScheduler {
 
   /**
    * Runs a data job by ID
-   * @param id - Job ID to run (string)
-   * @param maxDurationToRun - Maximum duration in milliseconds for the job to run
+   * @param params.id - Job ID to run (string)
    * @returns Updated job entity and list of job IDs to run next
    */
-  async run(id: string, maxDurationToRun?: number): Promise<RunJobResult> {
-    logger.info(`Running job ${id}${maxDurationToRun ? ` with max duration ${maxDurationToRun}ms` : ""}`);
-    
-    this.validateJobId(id);
+  async run(params: { id: string }): Promise<RunJobResult> {
+    const { id } = params;
+    logger.info(`Running job ${id} with max duration ${this.maxJobDurationMs}ms`);
     
     const jobRepo = this.dataSource.getRepository(DataJobEntity);
     const job = await jobRepo.findOne({ where: { id } });
@@ -139,7 +172,15 @@ export class DataJobScheduler {
       throw new Error(`Job ${id} not found`);
     }
     
-    const startTime = Date.now();
+    // Verify job is not already finished
+    if (job.state === JobState.FINISHED) {
+      throw new Error(`Job ${id} is already finished with result: ${job.result}`);
+    }
+    
+    // Set started time if not already set
+    if (!job.startedAt) {
+      job.startedAt = new Date();
+    }
     
     // Update job state to running
     job.state = JobState.RUNNING;
@@ -154,17 +195,30 @@ export class DataJobScheduler {
       }
       
       if (job.type === JobType.LOAD) {
-        const { isFinished } = await this.executeLoadJob(job, connector, maxDurationToRun);
+        const { isFinished } = await this.executeLoadJob({
+          job,
+          connector,
+          maxDurationToRun: this.maxJobDurationMs
+        });
         
         if (isFinished) {
-          await this.updateJobState(job, JobState.FINISHED, JobResult.SUCCESS, startTime);
+          // Set finished time
+          job.finishedAt = new Date();
           
-          // Clear dataJobId and set isLoading to false when job is finished
-          await connector.updateStatus({ dataJobId: null, isLoading: false });
+          // Update job state to finished with success result
+          await this.updateJobState({ job, state: JobState.FINISHED, result: JobResult.SUCCESS });
+          
+          // Clear dataJobId, set isLoading to false, and save lastDataJobId when job is finished
+          await connector.updateStatus({ 
+            dataJobId: null, 
+            isLoading: false,
+            lastDataJobId: job.id
+          });
           
           logger.info(`Job ${id} completed successfully`);
         } else {
-          await this.updateJobWithRunTime(job, startTime);
+          // Job not finished yet, save current state and continue
+          await jobRepo.save(job);
           nextJobIds.push(id);
           logger.info(`Job ${id} reached time limit, will continue running`);
         }
@@ -173,20 +227,15 @@ export class DataJobScheduler {
       }
       
     } catch (error) {
-      await this.updateJobState(job, JobState.FINISHED, JobResult.ERROR, startTime);
-      
-      // Clear dataJobId and set isLoading to false when job fails
-      try {
-        const connector = await this.getDataConnector(job.dataConnectorId);
-        if (connector) {
-          await connector.updateStatus({ dataJobId: null, isLoading: false });
-        }
-      } catch (connectorError) {
-        logger.error(`Failed to update connector status after job failure: ${safeErrorString(connectorError)}`);
-      }
+      // Use the helper function to stop the job with error result and clear connector status
+      await this.stopJob({ 
+        job, 
+        result: JobResult.ERROR
+      });
       
       logger.error(`Job ${id} failed: ${safeErrorString(error)}`);
-      throw error;
+      // Return gracefully instead of throwing to prevent unhandled promise rejections
+      // in after() blocks or background jobs
     }
     
     return { job, nextJobIds };
@@ -195,7 +244,11 @@ export class DataJobScheduler {
   /**
    * Updates job progress in the database
    */
-  private async updateJobProgress(job: DataJobEntity, updatedRecordCount: number): Promise<void> {
+  private async updateJobProgress(params: {
+    job: DataJobEntity;
+    updatedRecordCount: number;
+  }): Promise<void> {
+    const { job, updatedRecordCount } = params;
     const currentProgress = job.progress || { updatedRecordCount: 0 };
     currentProgress.updatedRecordCount = updatedRecordCount;
     job.progress = currentProgress;
@@ -207,11 +260,12 @@ export class DataJobScheduler {
   /**
    * Executes a load job and returns completion status
    */
-  private async executeLoadJob(
-    job: DataJobEntity, 
-    connector: DataConnector, 
-    maxDurationToRun?: number
-  ): Promise<{ isFinished: boolean }> {
+  private async executeLoadJob(params: {
+    job: DataJobEntity;
+    connector: DataConnector;
+    maxDurationToRun: number;
+  }): Promise<{ isFinished: boolean }> {
+    const { job, connector, maxDurationToRun } = params;
     logger.info(`Loading data for connector ${job.dataConnectorId}`);
     
     // Create progress callback that updates the job progress in the database
@@ -219,7 +273,7 @@ export class DataJobScheduler {
       // For progress updates, we want to accumulate the progress across multiple runs
       const currentProgress = job.progress || { updatedRecordCount: 0 };
       const newTotal = currentProgress.updatedRecordCount + params.updatedRecordCount;
-      await this.updateJobProgress(job, newTotal);
+      await this.updateJobProgress({ job, updatedRecordCount: newTotal });
     };
     
     const loadResult = await connector.load({ 
@@ -239,23 +293,69 @@ export class DataJobScheduler {
 
   /**
    * Gets a job by ID
-   * @param id - Job ID (string)
+   * @param params.id - Job ID (string)
    * @returns Job entity or null if not found
    */
-  async get(id: string): Promise<DataJobEntity | null> {
-    this.validateJobId(id);
+  async get(params: { id: string }): Promise<DataJobEntity | null> {
+    const { id } = params;
     return this.dataSource.getRepository(DataJobEntity).findOne({ where: { id } });
   }
 
   /**
    * Gets all jobs for a data connector
-   * @param dataConnectorId - Data connector ID
+   * @param params.dataConnectorId - Data connector ID
    * @returns Array of job entities
    */
-  async getByConnector(dataConnectorId: string): Promise<DataJobEntity[]> {
+  async getByConnector(params: { dataConnectorId: string }): Promise<DataJobEntity[]> {
+    const { dataConnectorId } = params;
     return this.dataSource.getRepository(DataJobEntity).find({ 
       where: { dataConnectorId },
       order: { createdAt: "DESC" }
     });
+  }
+
+  /**
+   * Cleans up stale jobs by canceling jobs that have not been updated for maxJobDurationMs * 2
+   * Uses maxJobDurationMs from config
+   * @returns Object containing counts of checked and canceled jobs
+   */
+  async cleanup(): Promise<{ checkedCount: number; canceledCount: number }> {
+    const STALE_JOB_THRESHOLD_MS = this.maxJobDurationMs * 2;
+    
+    logger.info(`Running job cleanup with threshold of ${STALE_JOB_THRESHOLD_MS}ms`);
+    
+    const jobRepo = this.dataSource.getRepository(DataJobEntity);
+    
+    // Find all unfinished jobs (created or running)
+    const unfinishedJobs = await jobRepo.find({
+      where: [
+        { state: JobState.CREATED },
+        { state: JobState.RUNNING }
+      ]
+    });
+    
+    logger.info(`Found ${unfinishedJobs.length} unfinished job(s) to check`);
+    
+    let canceledCount = 0;
+    const now = Date.now();
+    
+    for (const job of unfinishedJobs) {
+      const timeSinceUpdate = now - job.updatedAt.getTime();
+      
+      if (timeSinceUpdate > STALE_JOB_THRESHOLD_MS) {
+        logger.info(`Job ${job.id} is stale (last updated ${timeSinceUpdate}ms ago), canceling`);
+        
+        // Use the cancelJob helper to cancel the job and update connector status
+        await this.cancelJob({ job });
+        canceledCount++;
+      }
+    }
+    
+    logger.info(`Cleanup complete: checked ${unfinishedJobs.length} job(s), canceled ${canceledCount} stale job(s)`);
+    
+    return {
+      checkedCount: unfinishedJobs.length,
+      canceledCount
+    };
   }
 }

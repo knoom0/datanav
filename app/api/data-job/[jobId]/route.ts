@@ -25,7 +25,7 @@ async function handler(
   });
 
   // Get the job by ID
-  const job = await scheduler.get(jobId);
+  const job = await scheduler.get({ id: jobId });
 
   if (!job) {
     throw new APIError(`Job not found: ${jobId}`, 404);

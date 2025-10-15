@@ -105,10 +105,21 @@ export default function DataPage() {
     filterConnectors();
   }, [connectors, searchQuery, statusFilter]);
 
+  // Cleanup stale jobs
+  const cleanupStaleJobs = async () => {
+    try {
+      await fetch("/api/data-job/cleanup", { method: "POST" });
+    } catch (err) {
+      // Silently fail - cleanup is not critical for page functionality
+      console.error("Failed to cleanup stale jobs:", err);
+    }
+  };
+
   // Set page title and load connectors on mount
   useEffect(() => {
     setTitle("Data Connectors");
     loadConnectors();
+    cleanupStaleJobs();
   }, [setTitle]);
 
   if (loading) {

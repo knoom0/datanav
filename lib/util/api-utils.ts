@@ -62,26 +62,36 @@ export function withAPIErrorHandler(handler: APIHandler) {
 /**
  * Utility function to call internal APIs from within the application.
  * This is useful for making API calls from server-side code to other internal endpoints.
+ * 
+ * @param params - Configuration object
+ * @param params.endpoint - The endpoint to call (e.g., "/api/data/load")
+ * @param params.request - The original request object to get base URL and forward authentication cookies
+ * @param params.method - HTTP method (defaults to "GET")
+ * @param params.headers - Additional headers to include
+ * @param params.body - Request body to send
  */
-export async function callInternalAPI(
-  baseUrl: string,
-  endpoint: string,
-  options: {
-    method?: "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
-    headers?: Record<string, string>;
-    body?: any;
-  } = {}
-): Promise<{ success: boolean; data?: any; error?: string }> {
-  const { method = "GET", headers = {}, body } = options;
+export async function callInternalAPI(params: {
+  endpoint: string;
+  request: Request;
+  method?: "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
+  headers?: Record<string, string>;
+  body?: any;
+}): Promise<{ success: boolean; data?: any; error?: string }> {
+  const { endpoint, request, method = "GET", headers = {}, body } = params;
   
   try {
+    // Get base URL from request
+    const baseUrl = new URL(request.url).origin;
     const url = `${baseUrl}${endpoint}`;
-    console.log(`Calling internal API: ${url}`);
+    
+    // Extract cookies from the original request for authentication
+    const cookieHeader = request.headers.get("cookie");
     
     const response = await fetch(url, {
       method,
       headers: {
         "Content-Type": "application/json",
+        ...(cookieHeader && { "Cookie": cookieHeader }),
         ...headers,
       },
       ...(body && { body: JSON.stringify(body) }),

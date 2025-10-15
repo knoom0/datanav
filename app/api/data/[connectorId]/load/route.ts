@@ -59,9 +59,10 @@ async function handler(
     try {
       logger.info(`Triggering job ${jobId} for connector ${connectorId}`);
       
-      // Get base URL from request and trigger the job directly
-      const baseUrl = new URL(request.url).origin;
-      const result = await callInternalAPI(baseUrl, `/api/data-job/${jobId}/run`, {
+      // Trigger the job directly
+      const result = await callInternalAPI({
+        endpoint: `/api/data-job/${jobId}/run`,
+        request,
         method: "POST",
       });
       
