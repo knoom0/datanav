@@ -46,7 +46,7 @@ export const config = {
   },
 
   job: {
-    maxJobDurationMs: 5000,
+    maxJobDurationMs: 60000,
   },
 
   packages: {
