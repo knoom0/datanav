@@ -43,10 +43,11 @@ class MockDataLoader implements DataLoader {
     this.refreshToken = token;
   }
 
-  async *fetch(_params: { lastLoadedAt?: Date; syncContext: Record<string, any> | null }) {
-    // Mock data generator
+  async *fetch(_params: { lastLoadedAt?: Date; syncContext: Record<string, any> | null; maxDurationToRunMs?: number }) {
+    // Mock data - yield records one by one
     yield { resourceName: "TestEvent", id: "1", title: "Test Event 1" };
     yield { resourceName: "TestEvent", id: "2", title: "Test Event 2" };
+    return { hasMore: false };
   }
 }
 
@@ -80,13 +81,14 @@ class MockDataLoaderWithNullIds implements DataLoader {
     this.refreshToken = token;
   }
 
-  async *fetch(_params: { lastLoadedAt?: Date; syncContext: Record<string, any> | null }) {
-    // Mock data generator with some null id records
+  async *fetch(_params: { lastLoadedAt?: Date; syncContext: Record<string, any> | null; maxDurationToRunMs?: number }) {
+    // Mock data with some null id records for testing filtering
     yield { resourceName: "TestEvent", id: "1", title: "Test Event 1" };
     yield { resourceName: "TestEvent", id: null, title: "Test Event with null id" };
     yield { resourceName: "TestEvent", id: "2", title: "Test Event 2" };
     yield { resourceName: "TestEvent", id: undefined, title: "Test Event with undefined id" };
     yield { resourceName: "TestEvent", id: "3", title: "Test Event 3" };
+    return { hasMore: false };
   }
 }
 
@@ -273,7 +275,7 @@ describe("DataConnector", () => {
     });
 
     it("should load data, create table, insert records, and update timestamps", async () => {
-      await connector.load();
+      await connector.load({});
 
       // Verify lastLoadedAt was updated
       const status = await connector.getStatus();
@@ -336,7 +338,7 @@ describe("DataConnector", () => {
       statusEntity.updatedAt = new Date();
       await repo.save(statusEntity);
 
-      await connectorWithNullIds.load();
+      await connectorWithNullIds.load({});
 
       // Verify only valid records were inserted (3 out of 5 total)
       // Records with null/undefined id should be filtered out

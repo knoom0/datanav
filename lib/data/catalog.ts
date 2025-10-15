@@ -1,20 +1,10 @@
 import { DataSource } from "typeorm";
 
-import { DataConnectorConfig } from "@/lib/data/connector";
+import { DataConnector, DataConnectorConfig } from "@/lib/data/connector";
 import { dataConnectorConfigs } from "@/lib/data/connector-config";
-import { DataConnectorStatusEntity } from "@/lib/data/entities";
-
-/**
- * Information about a data connector including its configuration and current status
- */
-export interface DataConnectorInfo {
-  id: string;
-  name: string;
-  description: string;
-  isConnected: boolean;
-  isLoading: boolean;
-  lastLoadedAt: Date | null;
-}
+import { DataConnectorStatusEntity, DataJobEntity } from "@/lib/data/entities";
+import { APIError } from "@/lib/errors";
+import { DataConnectorInfo, DataJobInfo } from "@/lib/types";
 
 /**
  * Catalog for managing registered data connector configurations
@@ -52,16 +42,28 @@ export class DataCatalog {
   /**
    * Get a single connector by ID with its current status
    */
-  async getConnector(connectorId: string): Promise<DataConnectorInfo | null> {
+  async getConnectorInfo(connectorId: string): Promise<DataConnectorInfo | null> {
     const config = this.getConfig(connectorId);
     if (!config) {
       return null;
     }
 
-    const statusRepo = this.dataSource.getRepository(DataConnectorStatusEntity);
-    const status = await statusRepo.findOne({
-      where: { connectorId }
-    });
+    // Use a LEFT JOIN to fetch status and last job in one query
+    const result = await this.dataSource
+      .getRepository(DataConnectorStatusEntity)
+      .createQueryBuilder("status")
+      .leftJoinAndMapOne(
+        "status.lastJob",
+        DataJobEntity,
+        "job",
+        "status.lastDataJobId = job.id"
+      )
+      .where("status.connectorId = :connectorId", { connectorId })
+      .getOne();
+
+    const status = result;
+    const lastJob = (status as any)?.lastJob as DataJobEntity | undefined;
+    const lastDataJob = lastJob ? this.mapJobEntityToInfo(lastJob) : null;
 
     return {
       id: config.id,
@@ -70,6 +72,8 @@ export class DataCatalog {
       isConnected: status?.isConnected || false,
       isLoading: status?.isLoading || false,
       lastLoadedAt: status?.lastLoadedAt || null,
+      dataJobId: status?.dataJobId || null,
+      lastDataJob,
     };
   }
 
@@ -78,14 +82,38 @@ export class DataCatalog {
    */
   async getAll(): Promise<DataConnectorInfo[]> {
     const configs = Array.from(this.connectorConfigs.values());
-    const statusRepo = this.dataSource.getRepository(DataConnectorStatusEntity);
     
-    // Fetch all statuses in one query for efficiency
-    const statuses = await statusRepo.find();
-    const statusMap = new Map(statuses.map(status => [status.connectorId, status]));
+    // Use a LEFT JOIN to fetch all statuses and their last jobs in one query
+    const statusesWithJobs = await this.dataSource
+      .getRepository(DataConnectorStatusEntity)
+      .createQueryBuilder("status")
+      .leftJoinAndMapOne(
+        "status.lastJob",
+        DataJobEntity,
+        "job",
+        "status.lastDataJobId = job.id"
+      )
+      .getMany();
+    
+    // Build a map of statuses by connector ID
+    const statusMap = new Map(
+      statusesWithJobs.map(status => {
+        const lastJob = (status as any).lastJob as DataJobEntity | undefined;
+        return [
+          status.connectorId,
+          {
+            status,
+            lastDataJob: lastJob ? this.mapJobEntityToInfo(lastJob) : null
+          }
+        ];
+      })
+    );
     
     return configs.map(config => {
-      const status = statusMap.get(config.id);
+      const data = statusMap.get(config.id);
+      const status = data?.status;
+      const lastDataJob = data?.lastDataJob || null;
+      
       return {
         id: config.id,
         name: config.name,
@@ -93,6 +121,8 @@ export class DataCatalog {
         isConnected: status?.isConnected || false,
         isLoading: status?.isLoading || false,
         lastLoadedAt: status?.lastLoadedAt || null,
+        dataJobId: status?.dataJobId || null,
+        lastDataJob,
       };
     });
   }
@@ -107,10 +137,48 @@ export class DataCatalog {
     }
 
     // Create the connector instance to access its disconnect method
-    const { DataConnector } = await import("@/lib/data/connector");
     const connector = await DataConnector.create(config, this.dataSource);
     
     // Disconnect and clear all data
     await connector.disconnect();
+  }
+
+  /**
+   * Gets a data connector instance by ID
+   * @param connectorId - The connector ID
+   * @returns DataConnector instance
+   * @throws APIError if connector not found
+   */
+  async getConnector(connectorId: string): Promise<DataConnector> {
+    const connectorConfig = this.getConfig(connectorId);
+    
+    if (!connectorConfig) {
+      throw new APIError(`Data connector not found: ${connectorId}`, 404);
+    }
+    
+    return DataConnector.create(connectorConfig, this.dataSource);
+  }
+
+  /**
+   * Maps a DataJobEntity to DataJobInfo for API responses
+   */
+  private mapJobEntityToInfo(job: DataJobEntity): DataJobInfo {
+    const runTimeMs = job.startedAt 
+      ? (job.finishedAt ? job.finishedAt.getTime() : Date.now()) - job.startedAt.getTime()
+      : 0;
+
+    return {
+      id: job.id,
+      dataConnectorId: job.dataConnectorId,
+      type: job.type,
+      state: job.state,
+      result: job.result,
+      runTimeMs,
+      params: job.params,
+      syncContext: job.syncContext,
+      progress: job.progress,
+      createdAt: job.createdAt,
+      updatedAt: job.updatedAt,
+    };
   }
 }

@@ -18,7 +18,6 @@ import { useState, useEffect } from "react";
 
 import { useAppTitle } from "@/components/app-title-context";
 import { DataConnectButton } from "@/components/data-connect-button";
-import logger from "@/lib/logger";
 
 // Force dynamic rendering
 export const dynamic = "force-dynamic";
@@ -101,21 +100,26 @@ export default function DataPage() {
     setFilteredConnectors(connectors);
   };
 
-  // Handle connector connect/disconnect events
-  const handleConnectorUpdate = () => {
-    // Reload connectors to get updated status
-    loadConnectors();
-  };
-
   // Apply filters when dependencies change
   useEffect(() => {
     filterConnectors();
   }, [connectors, searchQuery, statusFilter]);
 
+  // Cleanup stale jobs
+  const cleanupStaleJobs = async () => {
+    try {
+      await fetch("/api/data-job/cleanup", { method: "POST" });
+    } catch (err) {
+      // Silently fail - cleanup is not critical for page functionality
+      console.error("Failed to cleanup stale jobs:", err);
+    }
+  };
+
   // Set page title and load connectors on mount
   useEffect(() => {
     setTitle("Data Connectors");
     loadConnectors();
+    cleanupStaleJobs();
   }, [setTitle]);
 
   if (loading) {
@@ -212,10 +216,6 @@ export default function DataPage() {
               <DataConnectButton
                 key={connector.id}
                 connectorId={connector.id}
-                onConnectComplete={handleConnectorUpdate}
-                onError={(error) => {
-                  logger.error(`Connector error: ${error}`);
-                }}
               />
             ))}
           </SimpleGrid>

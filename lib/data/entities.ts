@@ -95,6 +95,12 @@ export class DataConnectorStatusEntity extends BaseEntity {
   @Column({ type: "json", nullable: true })
     syncContext!: Record<string, any> | null;
 
+  @Column({ type: "varchar", nullable: true })
+    dataJobId!: string | null;
+
+  @Column({ type: "varchar", nullable: true })
+    lastDataJobId!: string | null;
+
   @Column({ type: Date, nullable: true })
     askedToConnectUntil!: Date | null;
 
@@ -129,7 +135,7 @@ export class DataTableStatusEntity extends BaseEntity {
 
 @Entity({ name: "data_spec", schema: SCHEMA_NAME })
 export class DataSpecEntity extends BaseEntity {
-  @PrimaryColumn()
+  @PrimaryColumn({ type: "varchar" })
     projectId!: string;
 
   @Column({ 
@@ -142,7 +148,54 @@ export class DataSpecEntity extends BaseEntity {
     queries!: any;
 }
 
-export const ENTITIES = [UIBundleEntity, ComponentInfoEntity, DataConnectorStatusEntity, DataTableStatusEntity, DataSpecEntity] as const;
+@Entity({ name: "data_job", schema: SCHEMA_NAME })
+export class DataJobEntity extends BaseEntity {
+  @PrimaryColumn({ type: "varchar" })
+    id!: string;
+
+  @Column({ type: "varchar" })
+    dataConnectorId!: string;
+
+  @Column({ type: "varchar", default: "load" })
+    type!: string;
+
+  @Column({ type: "varchar" })
+    state!: "created" | "running" | "finished";
+
+  @Column({ type: "varchar", nullable: true })
+    result!: "success" | "error" | "canceled" | null;
+
+  @Column({ type: "json", nullable: true })
+    params!: Record<string, any> | null;
+
+  @Column({ type: "json", nullable: true })
+    syncContext!: Record<string, any> | null;
+
+  @Column({ type: "json", nullable: true })
+    progress!: {
+      updatedRecordCount: number;
+      [key: string]: any;
+    } | null;
+
+  @Column({ type: Date, nullable: true })
+    startedAt!: Date | null;
+
+  @Column({ type: Date, nullable: true })
+    finishedAt!: Date | null;
+
+  @CreateDateColumn()
+    createdAt!: Date;
+
+  @UpdateDateColumn()
+    updatedAt!: Date;
+}
+
+export type DataRecord = {
+  resourceName: string;
+  [key: string]: any;
+};
+
+export const ENTITIES = [UIBundleEntity, ComponentInfoEntity, DataConnectorStatusEntity, DataTableStatusEntity, DataSpecEntity, DataJobEntity] as const;
 
 // Common database options shared across all user data sources
 const COMMON_DATABASE_OPTIONS = {
@@ -192,38 +245,40 @@ export async function getUserDataSource(): Promise<DataSource> {
   // Get current user ID from Supabase authentication
   const userId = await getCurrentUserId();
   
-  // Get or create user-specific data source
+  // Get existing user-specific data source
   let userDataSource = userDataSources.get(userId);
-  let dataSourceOptions: DataSourceOptions;
   
+  // Create DataSource if it doesn't exist
   if (!userDataSource) {
     // Get user data source options (this will create the database if it doesn't exist)
     const baseDataSourceOptions = await getUserDataSourceOptions(userId);    
     // Merge with common database options that include entities and other settings
-    dataSourceOptions = {
+    const dataSourceOptions: DataSourceOptions = {
       ...COMMON_DATABASE_OPTIONS,
       ...baseDataSourceOptions,
     };
 
     logger.info(`Creating user data source for user ${userId} with options: ${JSON.stringify(dataSourceOptions)}`);
     userDataSource = new DataSource(dataSourceOptions);
-
+    userDataSources.set(userId, userDataSource);
+  }
+  
+  // Initialize DataSource if it's not initialized
+  if (!userDataSource.isInitialized) {
     try {
       // Ensure the datanav schema exists before initializing with entities
       await createSchemaIfNotExist({
-        dataSourceOptions,
+        dataSourceOptions: userDataSource.options,
         schemaName: SCHEMA_NAME
       });
+      
       await userDataSource.initialize();      
       // Create full-text search indexes for the user's database
       await createFullTextSearchIndexesForUser(userDataSource);
     } catch (error) {
-      if (userDataSource.isInitialized) {
-        await userDataSource.destroy();
-      }
+      logger.error(`User data source initialization failed for user ${userId}: ${safeErrorString(error)}`);
       throw error;
     }
-    userDataSources.set(userId, userDataSource);
   }
   
   return userDataSource;

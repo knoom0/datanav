@@ -136,6 +136,74 @@ describe("DataWriter", () => {
       expect(result[0].name).toBe("John");
       expect(result[1].name).toBe("Jane");
     });
+
+    it("should handle invalid date values gracefully by setting them to null", async () => {
+      const resourceName = "test_invalid_dates";
+      const tableName = "test_connector.test_invalid_dates";
+      const schema: OpenAPIV3.SchemaObject = {
+        type: "object",
+        properties: {
+          event_id: { type: "string" },
+          name: { type: "string" },
+          created_at: { type: "string", format: "date-time" },
+          updated_at: { type: "string", format: "date-time" }
+        },
+        required: ["event_id"]
+      };
+
+      const records = [
+        { 
+          event_id: "1", 
+          name: "Valid Event", 
+          created_at: "2023-01-15T10:00:00.000Z", 
+          updated_at: "2023-01-16T10:00:00.000Z" 
+        },
+        { 
+          event_id: "2", 
+          name: "Invalid Created Date", 
+          created_at: "0000-12-31T00:00:00.000Z", // Invalid year 0000
+          updated_at: "2023-01-16T10:00:00.000Z" 
+        },
+        { 
+          event_id: "3", 
+          name: "Very Old Date", 
+          created_at: "0999-12-31T00:00:00.000Z", // Year before 1000
+          updated_at: "2023-01-16T10:00:00.000Z" 
+        },
+        { 
+          event_id: "4", 
+          name: "Future Year Out of Range", 
+          created_at: "10000-01-01T00:00:00.000Z", // Year > 9999
+          updated_at: "2023-01-16T10:00:00.000Z" 
+        }
+      ];
+
+      await dataWriter.syncTableRecords(resourceName, schema, records);
+
+      // Verify records were inserted with invalid dates set to null
+      const result = await testDataSource.query(`SELECT * FROM ${tableName} ORDER BY event_id`);
+      expect(result).toHaveLength(4);
+      
+      // Valid date should be preserved
+      expect(result[0].name).toBe("Valid Event");
+      expect(result[0].created_at).toBeTruthy();
+      expect(result[0].updated_at).toBeTruthy();
+      
+      // Invalid date (year 0000) should be null
+      expect(result[1].name).toBe("Invalid Created Date");
+      expect(result[1].created_at).toBeNull();
+      expect(result[1].updated_at).toBeTruthy();
+      
+      // Very old date should be null
+      expect(result[2].name).toBe("Very Old Date");
+      expect(result[2].created_at).toBeNull();
+      expect(result[2].updated_at).toBeTruthy();
+      
+      // Future year out of range should be null
+      expect(result[3].name).toBe("Future Year Out of Range");
+      expect(result[3].created_at).toBeNull();
+      expect(result[3].updated_at).toBeTruthy();
+    });
   });
 
   describe("property-to-column mapping", () => {

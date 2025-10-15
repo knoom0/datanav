@@ -1,3 +1,5 @@
+import type { DataRecord } from "@/lib/data/entities";
+
 /**
  * Pure interface for data loaders focused only on remote data fetching
  */
@@ -41,11 +43,12 @@ export interface DataLoader {
 
   /**
    * Fetches data from the remote source
-   * @param params - Fetch parameters including last loaded timestamp and sync context (modified in place)
-   * @returns Generator that yields records
+   * @param params - Fetch parameters including last loaded timestamp, sync context (modified in place), and max duration
+   * @returns AsyncGenerator yielding records and hasMore flag indicating if there are more pages
    */
   fetch(params: { 
     lastLoadedAt?: Date; 
     syncContext: Record<string, any> | null;
-  }): AsyncGenerator<{ resourceName: string; [key: string]: any }, void, unknown>;
+    maxDurationToRunMs?: number;
+  }): AsyncGenerator<DataRecord, { hasMore: boolean }, unknown>;
 }

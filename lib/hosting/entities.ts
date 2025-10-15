@@ -32,48 +32,53 @@ export class UserDatabaseConfig extends BaseEntity {
 export const HOSTING_ENTITIES = [UserDatabaseConfig] as const;
 
 let hostingDataSource: DataSource | null = null;
-let hostingDataSourceInitialized = false;
 
 export async function ensureHostingDataSourceInitialized() {
-  if (!hostingDataSourceInitialized) {
-    if (!hostingDataSource) {
+  // Create DataSource if it doesn't exist
+  if (!hostingDataSource) {
+    const config = getConfig();
+    const hostingDataSourceOptions = { 
+      ...config.database,
+      entities: HOSTING_ENTITIES,
+      synchronize: true,
+    };
+    hostingDataSource = new DataSource(hostingDataSourceOptions);
+  }
+  
+  // Initialize DataSource if it's not initialized
+  if (!hostingDataSource.isInitialized) {
+    try {
+      // Ensure the datanav schema exists before initializing with entities
       const config = getConfig();
-      const hostingDataSourceOptions = { 
-        ...config.database,
-        entities: HOSTING_ENTITIES,
-        synchronize: true,
-      };
-      hostingDataSource = new DataSource(hostingDataSourceOptions);
+      await createSchemaIfNotExist({
+        dataSourceOptions: config.database,
+        schemaName: SCHEMA_NAME
+      });
+      
+      // Initialize the data source
+      await hostingDataSource.initialize();
+    } catch (error) {
+      logger.error(`Hosting DataSource initialization failed: ${safeErrorString(error)}`);
+      throw error;
     }
-    
-    if (!hostingDataSource.isInitialized) {
-      try {
-        // Ensure the datanav schema exists before initializing with entities
-        const config = getConfig();
-        await createSchemaIfNotExist({
-          dataSourceOptions: config.database,
-          schemaName: SCHEMA_NAME
-        });
-        
-        // Now initialize the main data source with entities
-        await hostingDataSource.initialize();
-      } catch (error) {
-        logger.error(`Hosting DataSource initialization failed, resetting and retrying: ${safeErrorString(error)}`);
-        
-        if (hostingDataSource.isInitialized) {
-          await hostingDataSource.destroy();
-        }
-        hostingDataSource = null;
-        hostingDataSourceInitialized = false;
-        
-        throw error;
-      }
-    }
-    hostingDataSourceInitialized = true;
   }
 }
 
 export async function getHostingDataSource(): Promise<DataSource> {
   await ensureHostingDataSourceInitialized();
   return hostingDataSource!;
+}
+
+/**
+ * Force reset the hosting data source - useful for fixing connection conflicts
+ */
+export async function resetHostingDataSource(): Promise<void> {
+  if (hostingDataSource?.isInitialized) {
+    try {
+      await hostingDataSource.destroy();
+    } catch (error) {
+      logger.warn(`Failed to destroy hosting data source during reset: ${safeErrorString(error)}`);
+    }
+  }
+  hostingDataSource = null;
 }

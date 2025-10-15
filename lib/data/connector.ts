@@ -8,7 +8,7 @@ import { DataWriter } from "@/lib/data/writer";
 import logger from "@/lib/logger";
 import { mergeAllOfSchemas, createZodSchema } from "@/lib/util/openapi-utils";
 
-const BATCH_SIZE = 500; // Process records in batches for efficiency
+const BATCH_SIZE = 100; // Process records in batches for efficiency
 
 export interface DataConnectorConfig {
   id: string;
@@ -33,6 +33,7 @@ interface ContinueToConnectParams {
 
 export interface DataLoadResult {
   updatedRecordCount: number;
+  isFinished: boolean;
 }
 
 export class DataConnector {
@@ -115,6 +116,22 @@ export class DataConnector {
     return this.dataSource.getRepository(DataConnectorStatusEntity).findOne({
       where: { connectorId: this.id }
     });
+  }
+
+  /**
+   * Checks if the connector is connected
+   */
+  async isConnected(): Promise<boolean> {
+    const status = await this.getStatus();
+    return status?.isConnected ?? false;
+  }
+
+  /**
+   * Checks if the connector is currently loading
+   */
+  async isLoading(): Promise<boolean> {
+    const status = await this.getStatus();
+    return status?.isLoading ?? false;
   }
 
   /**
@@ -300,17 +317,19 @@ export class DataConnector {
     const accessToken = this.dataLoader.getAccessToken();
     const refreshToken = this.dataLoader.getRefreshToken?.() || null;
     await this.saveTokens(accessToken, refreshToken);
-    
-    // Load data for the first time before updating connection status
-    await this.load();
-    
+        
     // Update connection status after successful data load
     await this.updateConnectionStatus(true);
     
     return { success: true };
   }
 
-  async load(): Promise<DataLoadResult> {
+  async load(params: { 
+    maxDurationToRunMs?: number;
+    onProgressUpdate?: (params: { updatedRecordCount: number }) => void | Promise<void>;
+  } = {}): Promise<DataLoadResult> {
+    const { maxDurationToRunMs, onProgressUpdate } = params;
+    
     // Always prepare tables first, even if there's no data
     await this.prepareTables();
     
@@ -327,33 +346,56 @@ export class DataConnector {
     // Initialize syncContext object for the loader to modify
     const syncContext = status?.syncContext ?? {};
     
-    const fetchGenerator = this.dataLoader.fetch({ 
+    let recordsBySchema: Record<string, any[]> = {};
+    let totalUpdatedRecords = 0;
+    let isFinished = true; // Assume finished unless there are more pages or error occurs
+    
+    const recordGenerator = this.dataLoader.fetch({ 
       lastLoadedAt: status?.lastLoadedAt ?? undefined,
-      syncContext: syncContext
+      syncContext: syncContext,
+      maxDurationToRunMs
     });
     
-    let recordsBySchema: Record<string, any[]> = {};
-    let recordCount = 0;
-    let totalUpdatedRecords = 0;
-    
-    for await (const record of fetchGenerator) {
-      const { resourceName, ...data } = record;
+    // Process records as they arrive from the generator
+    let done: boolean | undefined;
+    let value: any;
+
+    while (!done) {
+      ({ done, value } = await recordGenerator.next());
+
+      if (done) {
+        isFinished = !value.hasMore;
+        break;
+      }
+      
+      // This is a DataRecord
+      const { resourceName, ...data } = value;
       (recordsBySchema[resourceName] ??= []).push(data);
-      recordCount++;
       
       // Process batch when it reaches the batch size
-      if (recordCount >= BATCH_SIZE) {
+      if (Object.values(recordsBySchema).reduce((total, records) => total + records.length, 0) >= BATCH_SIZE) {
         const batchUpdatedRecords = await this.processBatch(recordsBySchema);
         totalUpdatedRecords += batchUpdatedRecords;
+        
+        // Call progress callback if provided
+        if (onProgressUpdate) {
+          await onProgressUpdate({ updatedRecordCount: totalUpdatedRecords });
+        }
+        
         recordsBySchema = {};
-        recordCount = 0;
       }
     }
     
     // Process any remaining records
-    if (recordCount > 0) {
+    const remainingRecordCount = Object.values(recordsBySchema).reduce((total, records) => total + records.length, 0);
+    if (remainingRecordCount > 0) {
       const batchUpdatedRecords = await this.processBatch(recordsBySchema);
       totalUpdatedRecords += batchUpdatedRecords;
+      
+      // Call progress callback if provided
+      if (onProgressUpdate) {
+        await onProgressUpdate({ updatedRecordCount: totalUpdatedRecords });
+      }
     }
     
     const now = new Date();
@@ -362,7 +404,7 @@ export class DataConnector {
     await this.updateLastLoadedAt(now);
     await this.updateSyncContext(syncContext);
     
-    return { updatedRecordCount: totalUpdatedRecords };
+    return { updatedRecordCount: totalUpdatedRecords, isFinished };
   }
 
   /**
@@ -402,6 +444,32 @@ export class DataConnector {
     await tableStatusRepo.delete({ connectorId: this.id });
     
     logger.info(`Successfully disconnected connector ${this.id} and cleared all data`);
+  }
+
+  /**
+   * Updates the connector status
+   * @param updates - Partial status updates
+   */
+  async updateStatus(updates: Partial<{
+    isConnected: boolean;
+    isLoading: boolean;
+    lastLoadedAt: Date | null;
+    dataJobId: string | null;
+    lastDataJobId: string | null;
+  }>): Promise<void> {
+    const statusRepo = this.dataSource.getRepository(DataConnectorStatusEntity);
+    
+    // Update or create status record
+    await statusRepo.upsert(
+      {
+        connectorId: this.id,
+        ...updates,
+        updatedAt: new Date(),
+      },
+      {
+        conflictPaths: ["connectorId"],
+      }
+    );
   }
 
   /**

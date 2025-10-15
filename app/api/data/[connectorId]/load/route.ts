@@ -1,12 +1,11 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 
 import { DataCatalog } from "@/lib/data/catalog";
-import { DataConnector } from "@/lib/data/connector";
-import { getUserDataSource, DataConnectorStatusEntity } from "@/lib/data/entities";
+import { getUserDataSource } from "@/lib/data/entities";
+import { DataJobScheduler } from "@/lib/data/job";
 import { APIError } from "@/lib/errors";
 import logger from "@/lib/logger";
-import { withAPIErrorHandler } from "@/lib/util/api-utils";
-import { safeErrorString } from "@/lib/util/log-util";
+import { withAPIErrorHandler, callInternalAPI } from "@/lib/util/api-utils";
 
 async function handler(
   request: Request,
@@ -20,74 +19,65 @@ async function handler(
 
   logger.info(`Manual load requested for data connector: ${connectorId}`);
 
-  // Get the data source and create catalog
+  // Get the data source and check connector status
   const dataSource = await getUserDataSource();
   const catalog = new DataCatalog({ dataSource });
-  const connectorConfig = catalog.getConfig(connectorId);
-
-  if (!connectorConfig) {
-    throw new APIError(`Data connector not found: ${connectorId}`, 404);
-  }
-
-  // Check if connector is connected
-  const statusRepo = dataSource.getRepository(DataConnectorStatusEntity);
-  const status = await statusRepo.findOne({
-    where: { connectorId }
-  });
-
-  if (!status?.isConnected) {
+  const connector = await catalog.getConnector(connectorId);
+  
+  // Check connector status
+  if (!(await connector.isConnected())) {
     throw new APIError(`Data connector is not connected: ${connectorId}`, 400);
   }
 
   // Check if already loading
-  if (status.isLoading) {
+  if (await connector.isLoading()) {
     throw new APIError(`Data connector is already loading: ${connectorId}`, 409);
   }
 
-  try {
-    // Set loading state
-    await statusRepo.update(
-      { connectorId },
-      { isLoading: true }
-    );
+  // Create job scheduler and create a new job
+  const scheduler = new DataJobScheduler({
+    dataSource,
+    getDataConnector: catalog.getConnector.bind(catalog)
+  });
 
-    // Create DataConnector instance and load data
-    const connector = await DataConnector.create(connectorConfig, dataSource);
-    logger.info(`Starting manual data load for connector: ${connectorId}`);
-    
-    const loadResult = await connector.load();
-    
-    logger.info(`Manual load completed for ${connectorId}: ${loadResult.updatedRecordCount} records updated`);
+  const jobId = await scheduler.create({
+    dataConnectorId: connectorId,
+    type: "load"
+  });
 
-    return NextResponse.json({
-      success: true,
-      updatedRecordCount: loadResult.updatedRecordCount,
-      message: `Successfully loaded ${loadResult.updatedRecordCount} records`
-    });
+  logger.info(`Created job ${jobId} for connector ${connectorId}`);
 
-  } catch (error) {
-    logger.error(`Manual load failed for ${connectorId}: ${safeErrorString(error)}`);
-    
-    // Make sure to clear loading state on error
-    await statusRepo.update(
-      { connectorId },
-      { 
-        isLoading: false,
-        lastError: error instanceof Error ? error.message : "Unknown error"
+  // Prepare response
+  const response = NextResponse.json({
+    success: true,
+    jobId,
+    message: `Job created successfully. Job ID: ${jobId}`
+  });
+
+  // Use after() to trigger the job after response is sent
+  after(async () => {
+    try {
+      logger.info(`Triggering job ${jobId} for connector ${connectorId}`);
+      
+      // Trigger the job directly
+      const result = await callInternalAPI({
+        endpoint: `/api/data-job/${jobId}/run`,
+        request,
+        method: "POST",
+      });
+      
+      if (!result.success) {
+        throw new Error(`Job ${jobId} failed: ${result.error}`);
       }
-    );
+      
+      logger.info(`Job ${jobId} triggered successfully`);
+      
+    } catch (error) {
+      logger.error(`Failed to trigger job ${jobId}: ${error}`);
+    }
+  });
 
-    throw new APIError(
-      `Failed to load data: ${error instanceof Error ? error.message : "Unknown error"}`,
-      500
-    );
-  } finally {
-    // Always clear loading state
-    await statusRepo.update(
-      { connectorId },
-      { isLoading: false }
-    );
-  }
+  return response;
 }
 
 export const POST = withAPIErrorHandler(handler);

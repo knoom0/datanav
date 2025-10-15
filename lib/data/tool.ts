@@ -1,10 +1,10 @@
 import { z } from "zod/v3";
 
 import { BaseAgentTool } from "@/lib/agent/core/agent";
-import { DataCatalog, DataConnectorInfo } from "@/lib/data/catalog";
+import { DataCatalog } from "@/lib/data/catalog";
 import { DataConnectorStatusEntity } from "@/lib/data/entities";
 import logger from "@/lib/logger";
-import { ActionableError } from "@/lib/types";
+import { ActionableError, DataConnectorInfo } from "@/lib/types";
 
 
 // Constants for connection request timing

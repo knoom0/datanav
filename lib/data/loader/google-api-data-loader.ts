@@ -1,23 +1,24 @@
 import { google } from "googleapis";
 
+import type { DataRecord } from "@/lib/data/entities";
 import { DataLoader } from "@/lib/data/loader";
 import logger from "@/lib/logger";
-
-
-export type DataRecord = {
-  resourceName: string;
-  [key: string]: any;
-};
 
 export type GoogleAPIFetchParams = {
   auth: any; // OAuth2 client from googleapis
   lastLoadedTime?: Date;
-  syncContext: Record<string, any> | null;
+  syncContext: Record<string, any>;
 };
 
 export interface GoogleAPIDataLoaderConfig {
   scopes: string[];
-  onFetch: (params: GoogleAPIFetchParams) => AsyncGenerator<DataRecord, void, unknown>;
+  /**
+   * Fetches a single page or batch of data from the Google API
+   * @param params - Fetch parameters including auth, lastLoadedTime, and syncContext
+   * @returns AsyncGenerator yielding records and hasMore flag indicating if there are more pages
+   * @note This function should yield records from a single page/batch of data
+   */
+  onFetch: (params: GoogleAPIFetchParams) => AsyncGenerator<DataRecord, { hasMore: boolean }, unknown>;
 }
 
 export class GoogleAPIDataLoader implements DataLoader {
@@ -103,7 +104,8 @@ export class GoogleAPIDataLoader implements DataLoader {
   async *fetch(params: { 
     lastLoadedAt?: Date; 
     syncContext: Record<string, any> | null;
-  }): AsyncGenerator<DataRecord, void, unknown> {
+    maxDurationToRunMs?: number;
+  }): AsyncGenerator<DataRecord, { hasMore: boolean }, unknown> {
     if (!this.accessToken) {
       throw new Error("No access token available. Please authenticate first.");
     }
@@ -121,11 +123,35 @@ export class GoogleAPIDataLoader implements DataLoader {
       refresh_token: this.refreshToken,
     });
 
-    yield* this.googleConfig.onFetch({
-      lastLoadedTime: params.lastLoadedAt,
-      syncContext: params.syncContext,
-      auth,
-    });
+    const endTime = params.maxDurationToRunMs ? Date.now() + params.maxDurationToRunMs : Infinity;
+    let hasMore = true;
+    let recordCount = 0;
+
+    // Iteratively fetch pages until no more data or max duration reached    
+    while (hasMore && Date.now() < endTime) {
+      const generator = this.googleConfig.onFetch({
+        lastLoadedTime: params.lastLoadedAt,
+        syncContext: params.syncContext || {},
+        auth,
+      });
+
+      let done: boolean | undefined;
+      let value: DataRecord | { hasMore: boolean };
+
+      // Process records from the current page
+      while (!done) {
+        ({ done, value } = await generator.next());
+        if (done) {
+          hasMore = value.hasMore;
+          break;
+        }
+        recordCount++;
+        yield value as DataRecord;
+      }
+    }
+
+    logger.info(`Completed fetch with ${recordCount} records`);
+    return { hasMore };
   }
 
 }

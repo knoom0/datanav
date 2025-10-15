@@ -16,6 +16,7 @@ describe("GoogleAPIDataLoader", () => {
       onFetch: async function* () {
         yield { resourceName: "TestEvent", id: "1", title: "Test Event 1" };
         yield { resourceName: "TestEvent", id: "2", title: "Test Event 2" };
+        return { hasMore: false };
       },
     });
   });
@@ -55,5 +56,40 @@ describe("GoogleAPIDataLoader", () => {
     delete process.env.GOOGLE_CLIENT_ID;
     
     expect(() => loader.authenticate({ redirectTo: `http://localhost:3000${DATA_CONNECTOR_URLS.AUTH_CALLBACK_PATH}` })).toThrow("Google OAuth configuration missing");
+  });
+
+  it("should fetch data using AsyncGenerator pattern", async () => {
+    // Set up access token
+    loader.setAccessToken("test-access-token");
+
+    const recordGenerator = loader.fetch({ 
+      syncContext: {}, 
+      maxDurationToRunMs: undefined 
+    });
+
+    const records = [];
+    let done: boolean | undefined;
+    let value: any;
+
+    // Process only a few records to avoid memory issues
+    let count = 0;
+    while (!done && count < 5) {
+      ({ done, value } = await recordGenerator.next());
+      if (!done && value && "resourceName" in value) {
+        records.push(value);
+        count++;
+      }
+    }
+
+    expect(records).toHaveLength(2);
+    expect(records[0]).toEqual({ resourceName: "TestEvent", id: "1", title: "Test Event 1" });
+    expect(records[1]).toEqual({ resourceName: "TestEvent", id: "2", title: "Test Event 2" });
+  });
+
+  it("should throw error when no access token is available", async () => {
+    await expect(async () => {
+      const generator = loader.fetch({ syncContext: {}, maxDurationToRunMs: undefined });
+      await generator.next();
+    }).rejects.toThrow("No access token available. Please authenticate first.");
   });
 });

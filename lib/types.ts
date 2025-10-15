@@ -78,6 +78,40 @@ export interface DataSource {
 }
 
 /**
+ * Information about a data connector including its configuration and current status
+ */
+export interface DataConnectorInfo {
+  id: string;
+  name: string;
+  description: string;
+  isConnected: boolean;
+  isLoading: boolean;
+  lastLoadedAt: Date | null;
+  dataJobId: string | null;
+  lastDataJob: DataJobInfo | null;
+}
+
+/**
+ * Job information that mirrors the DataJobEntity structure for UI display
+ */
+export interface DataJobInfo {
+  id: string;
+  dataConnectorId: string;
+  type: string;
+  state: "created" | "running" | "finished";
+  result: "success" | "error" | "canceled" | null;
+  runTimeMs: number;
+  params: Record<string, any> | null;
+  syncContext: Record<string, any> | null;
+  progress: {
+    updatedRecordCount: number;
+    [key: string]: any;
+  } | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
  * Column information that describes the schema of a data column
  */
 export interface ColumnInfo {

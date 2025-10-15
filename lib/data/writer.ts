@@ -426,11 +426,16 @@ export class DataWriter {
     // Get all column names and their types from the schema
     const propertyNames = Object.keys(schema.properties || {});
     const columns = propertyNames.map(prop => this.mapPropertyToColumnName(prop));
-    const columnTypes = Object.fromEntries(
+    
+    // Build a map of column info including type and format
+    const columnInfo = Object.fromEntries(
       propertyNames.map(prop => {
         const mappedCol = this.mapPropertyToColumnName(prop);
         const schemaProp = (schema.properties || {})[prop];
-        return [mappedCol, ("type" in schemaProp) ? schemaProp.type : null];
+        return [mappedCol, {
+          type: ("type" in schemaProp) ? schemaProp.type : null,
+          format: ("format" in schemaProp) ? schemaProp.format : null
+        }];
       })
     );
     
@@ -457,14 +462,38 @@ export class DataWriter {
           return null;
         }
         
+        const colInfo = columnInfo[col];
+        
         // Handle JSON/array values
-        if (columnTypes[col] === "array" || columnTypes[col] === "object") {
+        if (colInfo?.type === "array" || colInfo?.type === "object") {
           return JSON.stringify(value);
         }
         
         // Convert numbers to strings to ensure proper type handling
-        if (columnTypes[col] === "number" && typeof value === "number") {
+        if (colInfo?.type === "number" && typeof value === "number") {
           return value.toString();
+        }
+        
+        // Handle date/datetime values - validate using PostgreSQL-compatible parsing
+        if (typeof value === "string" && colInfo?.format && (colInfo.format === "date-time" || colInfo.format === "date")) {
+          const parsedDate = new Date(value);
+          
+          // Check if date parsing succeeded
+          if (isNaN(parsedDate.getTime())) {
+            logger.warn(`Invalid date value detected for ${col}: ${value}, setting to null`);
+            return null;
+          }
+          
+          // PostgreSQL supports timestamps from 4713 BC to 294276 AD
+          // However, practical range is 1000 AD to 9999 AD to avoid issues with:
+          // - Year 0 (doesn't exist in PostgreSQL's calendar)
+          // - Very old dates that may have timezone/calendar issues
+          // - Extended year formats (5+ digits) that may not be supported
+          const year = parsedDate.getFullYear();
+          if (year < 1000 || year > 9999) {
+            logger.warn(`Date value out of PostgreSQL supported range for ${col}: ${value} (year ${year}), setting to null`);
+            return null;
+          }
         }
         
         return value;

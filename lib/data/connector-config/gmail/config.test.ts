@@ -150,7 +150,7 @@ describeIf(
       dataLoader.setAccessToken(null);
       
       // This should fail because we don"t have a valid access token
-      await expect(connector.load()).rejects.toThrow("No access token available. Please authenticate first.");
+      await expect(connector.load({})).rejects.toThrow("No access token available. Please authenticate first.");
     });
 
     it("should load data with valid access token", async () => {
@@ -179,7 +179,7 @@ describeIf(
         });
       });
 
-      const loadResult: DataLoadResult = await connector.load();
+      const loadResult: DataLoadResult = await connector.load({});
       
       // Verify the load result is returned
       expect(loadResult).toBeDefined();
@@ -243,7 +243,7 @@ describeIf(
       mockGmailGetFn.mockResolvedValue(mockMessageDetails);
       
       // First load - this should be initial sync (no sync context)
-      await connector.load();
+      await connector.load({});
       
       // Check that we got a sync context stored
       let status = await connector.getStatus();
@@ -254,7 +254,7 @@ describeIf(
       mockGmailListFn.mockResolvedValue({ data: { messages: [] } });
       
       // Second load - this should use the stored lastMessageDate for incremental sync  
-      const secondLoadResult: DataLoadResult = await connector.load();
+      const secondLoadResult: DataLoadResult = await connector.load({});
       
       expect(secondLoadResult.updatedRecordCount).toBeGreaterThanOrEqual(0);
       
