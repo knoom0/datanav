@@ -1,20 +1,10 @@
 import { DataSource } from "typeorm";
 
-import { DataConnectorConfig } from "@/lib/data/connector";
+import { DataConnector, DataConnectorConfig } from "@/lib/data/connector";
 import { dataConnectorConfigs } from "@/lib/data/connector-config";
 import { DataConnectorStatusEntity } from "@/lib/data/entities";
-
-/**
- * Information about a data connector including its configuration and current status
- */
-export interface DataConnectorInfo {
-  id: string;
-  name: string;
-  description: string;
-  isConnected: boolean;
-  isLoading: boolean;
-  lastLoadedAt: Date | null;
-}
+import { APIError } from "@/lib/errors";
+import { DataConnectorInfo } from "@/lib/types";
 
 /**
  * Catalog for managing registered data connector configurations
@@ -52,7 +42,7 @@ export class DataCatalog {
   /**
    * Get a single connector by ID with its current status
    */
-  async getConnector(connectorId: string): Promise<DataConnectorInfo | null> {
+  async getConnectorInfo(connectorId: string): Promise<DataConnectorInfo | null> {
     const config = this.getConfig(connectorId);
     if (!config) {
       return null;
@@ -70,6 +60,7 @@ export class DataCatalog {
       isConnected: status?.isConnected || false,
       isLoading: status?.isLoading || false,
       lastLoadedAt: status?.lastLoadedAt || null,
+      dataJobId: status?.dataJobId || null,
     };
   }
 
@@ -93,6 +84,7 @@ export class DataCatalog {
         isConnected: status?.isConnected || false,
         isLoading: status?.isLoading || false,
         lastLoadedAt: status?.lastLoadedAt || null,
+        dataJobId: status?.dataJobId || null,
       };
     });
   }
@@ -107,10 +99,25 @@ export class DataCatalog {
     }
 
     // Create the connector instance to access its disconnect method
-    const { DataConnector } = await import("@/lib/data/connector");
     const connector = await DataConnector.create(config, this.dataSource);
     
     // Disconnect and clear all data
     await connector.disconnect();
+  }
+
+  /**
+   * Gets a data connector instance by ID
+   * @param connectorId - The connector ID
+   * @returns DataConnector instance
+   * @throws APIError if connector not found
+   */
+  async getConnector(connectorId: string): Promise<DataConnector> {
+    const connectorConfig = this.getConfig(connectorId);
+    
+    if (!connectorConfig) {
+      throw new APIError(`Data connector not found: ${connectorId}`, 404);
+    }
+    
+    return DataConnector.create(connectorConfig, this.dataSource);
   }
 }

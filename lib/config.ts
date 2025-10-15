@@ -23,6 +23,9 @@ export interface Config {
   hosting: {
     enabled: boolean;
   };
+  job: {
+    maxJobDurationMs: number;
+  };
   packages: Record<string, any>;
 }
 

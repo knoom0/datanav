@@ -149,7 +149,7 @@ describe("Google Calendar DataConnector Integration Tests", () => {
       dataLoader.setAccessToken(null);
       
       // This should fail because we don"t have a valid access token
-      await expect(connector.load()).rejects.toThrow("No access token available. Please authenticate first.");
+      await expect(connector.load({})).rejects.toThrow("No access token available. Please authenticate first.");
     });
 
     it("should load data with valid access token", async () => {
@@ -170,7 +170,7 @@ describe("Google Calendar DataConnector Integration Tests", () => {
 
       mockCalendarListFn.mockResolvedValue(mockEventList);
 
-      const loadResult: DataLoadResult = await connector.load();
+      const loadResult: DataLoadResult = await connector.load({});
       
       // Verify the load result is returned
       expect(loadResult).toBeDefined();
@@ -231,7 +231,7 @@ describe("Google Calendar DataConnector Integration Tests", () => {
       mockCalendarListFn.mockResolvedValue(mockFirstLoad);
       
       // First load - this should be initial sync (no sync context)
-      await connector.load();
+      await connector.load({});
       
       // Check that we got a sync context stored
       let status = await connector.getStatus();
@@ -242,7 +242,7 @@ describe("Google Calendar DataConnector Integration Tests", () => {
       mockCalendarListFn.mockResolvedValue({ data: { items: [] } });
       
       // Second load - this should use the stored update time for incremental sync  
-      const secondLoadResult: DataLoadResult = await connector.load();
+      const secondLoadResult: DataLoadResult = await connector.load({});
       
       expect(secondLoadResult.updatedRecordCount).toBeGreaterThanOrEqual(0);
       

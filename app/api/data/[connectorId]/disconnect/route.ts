@@ -23,7 +23,7 @@ async function handler(
   const catalog = new DataCatalog({ dataSource });
   
   // Get the specific connector to verify it exists
-  const connector = await catalog.getConnector(connectorId);
+  const connector = await catalog.getConnectorInfo(connectorId);
 
   if (!connector) {
     throw new APIError(`Data connector not found: ${connectorId}`, 404);

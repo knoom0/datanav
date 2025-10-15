@@ -57,4 +57,55 @@ export function withAPIErrorHandler(handler: APIHandler) {
       return handleAPIError(error);
     }
   };
+}
+
+/**
+ * Utility function to call internal APIs from within the application.
+ * This is useful for making API calls from server-side code to other internal endpoints.
+ */
+export async function callInternalAPI(
+  baseUrl: string,
+  endpoint: string,
+  options: {
+    method?: "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
+    headers?: Record<string, string>;
+    body?: any;
+  } = {}
+): Promise<{ success: boolean; data?: any; error?: string }> {
+  const { method = "GET", headers = {}, body } = options;
+  
+  try {
+    const url = `${baseUrl}${endpoint}`;
+    console.log(`Calling internal API: ${url}`);
+    
+    const response = await fetch(url, {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        ...headers,
+      },
+      ...(body && { body: JSON.stringify(body) }),
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => `HTTP ${response.status}`);
+      return {
+        success: false,
+        error: `Request failed with status ${response.status}: ${errorText}`,
+      };
+    }
+    
+    const data = await response.json().catch(() => null);
+    
+    return {
+      success: true,
+      data,
+    };
+    
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error occurred",
+    };
+  }
 } 

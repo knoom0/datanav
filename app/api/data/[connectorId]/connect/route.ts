@@ -6,7 +6,7 @@ import { DataConnector } from "@/lib/data/connector";
 import { getUserDataSource } from "@/lib/data/entities";
 import { APIError } from "@/lib/errors";
 import logger from "@/lib/logger";
-import { withAPIErrorHandler } from "@/lib/util/api-utils";
+import { withAPIErrorHandler, callInternalAPI } from "@/lib/util/api-utils";
 
 async function handler(
   request: Request,
@@ -50,12 +50,34 @@ async function handler(
     logger.info(`Starting connection for connector: ${connectorId}`);
     result = await connector.connect({ redirectTo });
   }
-  if (result.success) {
-    // load tables
-    await connector.load();
-  }
-
   logger.info(`Connection result for ${connectorId}: ${JSON.stringify(result)}`);
+
+  // If connection was successful, trigger a data load job
+  if (result.success) {
+    logger.info(`Triggering data load for connected connector: ${connectorId}`);
+    
+    // Call the data load API to trigger the load process synchronously
+    const baseUrl = new URL(request.url).origin;
+    const loadResult = await callInternalAPI(baseUrl, `/api/data/${connectorId}/load`, {
+      method: "POST",
+    });
+    
+    if (loadResult.success) {
+      logger.info(`Data load triggered successfully for ${connectorId}`);
+      return NextResponse.json({
+        ...result,
+        loadingStarted: true,
+        jobId: loadResult.data?.jobId
+      });
+    } else {
+      logger.error(`Failed to trigger data load for ${connectorId}: ${loadResult.error}`);
+      return NextResponse.json({
+        ...result,
+        loadingStarted: false,
+        loadingError: loadResult.error
+      });
+    }
+  }
 
   return NextResponse.json(result);
 }

@@ -27,7 +27,6 @@ export default {
 
       // Use stored lastEventUpdateTime from previous fetch or start fresh
       const lastEventUpdateTime: string | undefined = syncContext?.lastEventUpdateTime;
-      let hasMorePages = true;
       let latestEventUpdateTime: string | null = null;
 
       // Build query parameters
@@ -48,41 +47,56 @@ export default {
         queryParams.updatedMin = lastEventUpdateTime;
       }
       
-      while (hasMorePages) {
-        logger.info("Fetching calendar events");
-
-        const response = await calendar.events.list(queryParams);
-
-        if (!response.data) {
-          throw new Error("Failed to get events from calendar: No data returned");
-        }
-
-        // Yield events from this page immediately and track latest update time
-        for (const event of response.data.items || []) {
-          yield { resourceName: "Event", ...event };
-          
-          // Track the latest event update time from events
-          if (event.updated && (!latestEventUpdateTime || event.updated > latestEventUpdateTime)) {
-            latestEventUpdateTime = event.updated;
-          }
-        }
-
-        // Check if we have more pages to fetch
-        if (response.data.nextPageToken) {
-          // Use pageToken for regular pagination
-          queryParams.pageToken = response.data.nextPageToken;
-        } else {
-          hasMorePages = false;
-          // Store the latest event update time for next fetch cycle
-          // If no events were found, use current time as the baseline
-          const eventUpdateTimeToStore = latestEventUpdateTime || new Date().toISOString();
-          if (syncContext) {
-            syncContext.lastEventUpdateTime = eventUpdateTimeToStore;
-          }
-        }
-
-        logger.info("Processed calendar events page");
+      // Add pageToken for pagination if available
+      if (syncContext?.nextPageToken) {
+        queryParams.pageToken = syncContext.nextPageToken;
       }
+      
+      logger.info("Fetching calendar events");
+
+      const response = await calendar.events.list(queryParams);
+
+      if (!response.data) {
+        throw new Error("Failed to get events from calendar: No data returned");
+      }
+      
+      // Collect events from this page and track latest update time
+      for (const event of response.data.items || []) {
+        yield { resourceName: "Event", ...event };
+        
+        // Track the latest event update time from events
+        if (event.updated && (!latestEventUpdateTime || event.updated > latestEventUpdateTime)) {
+          latestEventUpdateTime = event.updated;
+        }
+      }
+
+      // Check if we have more pages to fetch
+      const nextPageToken = response.data.nextPageToken;
+      const eventCount = (response.data.items || []).length;
+      
+      // More reliable pagination: check both nextPageToken presence and result count
+      // If we got fewer results than maxResults, we've reached the last page
+      // even if nextPageToken is present
+      let hasMore = false;
+      if (nextPageToken && eventCount >= MAX_RESULTS) {
+        if (syncContext) {
+          syncContext.nextPageToken = nextPageToken;
+        }
+        hasMore = true;
+      } else {
+        // Store the latest event update time for next fetch cycle
+        // If no events were found, use current time as the baseline
+        const eventUpdateTimeToStore = latestEventUpdateTime || new Date().toISOString();
+        if (syncContext) {
+          syncContext.lastEventUpdateTime = eventUpdateTimeToStore;
+          // Clear nextPageToken since we're done with pagination
+          delete syncContext.nextPageToken;
+        }
+      }
+
+      logger.info(`Processed calendar events page, hasMore: ${hasMore}`);
+      
+      return { hasMore };
     },
   })
 } as DataConnectorConfig;

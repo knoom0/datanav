@@ -45,6 +45,10 @@ export const config = {
   hosting: {
   },
 
+  job: {
+    maxJobDurationMs: 5000,
+  },
+
   packages: {
     "react": React,
     "@mantine/carousel": MantineCarousel,

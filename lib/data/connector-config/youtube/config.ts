@@ -27,7 +27,6 @@ export default {
 
       // Use stored lastActivityTime from previous fetch or start fresh
       const lastActivityTime: string | undefined = syncContext?.lastActivityTime;
-      let hasMorePages = true;
       let latestActivityTime: string | null = null;
 
       // Build query parameters
@@ -47,41 +46,56 @@ export default {
         queryParams.publishedAfter = minDate.toISOString();
       }
       
-      while (hasMorePages) {
-        logger.info("Fetching YouTube activities");
-
-        const response = await youtube.activities.list(queryParams);
-
-        if (!response.data) {
-          throw new Error("Failed to get activities from YouTube: No data returned");
-        }
-
-        // Yield activities from this page immediately and track latest publish time
-        for (const activity of response.data.items || []) {
-          yield { resourceName: "Activity", ...activity };
-          
-          // Track the latest activity publish time from activities
-          if (activity.snippet?.publishedAt && (!latestActivityTime || activity.snippet.publishedAt > latestActivityTime)) {
-            latestActivityTime = activity.snippet.publishedAt;
-          }
-        }
-
-        // Check if we have more pages to fetch
-        if (response.data.nextPageToken) {
-          // Use pageToken for regular pagination
-          queryParams.pageToken = response.data.nextPageToken;
-        } else {
-          hasMorePages = false;
-          // Store the latest activity time for next fetch cycle
-          // If no activities were found, use current time as the baseline
-          const activityTimeToStore = latestActivityTime || new Date().toISOString();
-          if (syncContext) {
-            syncContext.lastActivityTime = activityTimeToStore;
-          }
-        }
-
-        logger.info("Processed YouTube activities page");
+      // Add pageToken for pagination if available
+      if (syncContext?.nextPageToken) {
+        queryParams.pageToken = syncContext.nextPageToken;
       }
+      
+      logger.info("Fetching YouTube activities");
+
+      const response = await youtube.activities.list(queryParams);
+
+      if (!response.data) {
+        throw new Error("Failed to get activities from YouTube: No data returned");
+      }
+
+      // Collect activities from this page and track latest publish time
+      for (const activity of response.data.items || []) {
+        yield { resourceName: "Activity", ...activity };
+        
+        // Track the latest activity publish time from activities
+        if (activity.snippet?.publishedAt && (!latestActivityTime || activity.snippet.publishedAt > latestActivityTime)) {
+          latestActivityTime = activity.snippet.publishedAt;
+        }
+      }
+
+      // Check if we have more pages to fetch
+      const nextPageToken = response.data.nextPageToken;
+      const activityCount = (response.data.items || []).length;
+      
+      // More reliable pagination: check both nextPageToken presence and result count
+      // If we got fewer results than maxResults, we've reached the last page
+      // even if nextPageToken is present
+      let hasMore = false;
+      if (nextPageToken && activityCount >= MAX_RESULTS) {
+        if (syncContext) {
+          syncContext.nextPageToken = nextPageToken;
+        }
+        hasMore = true;
+      } else {
+        // Store the latest activity time for next fetch cycle
+        // If no activities were found, use current time as the baseline
+        const activityTimeToStore = latestActivityTime || new Date().toISOString();
+        if (syncContext) {
+          syncContext.lastActivityTime = activityTimeToStore;
+          // Clear nextPageToken since we're done with pagination
+          delete syncContext.nextPageToken;
+        }
+      }
+
+      logger.info(`Processed YouTube activities page, hasMore: ${hasMore}`);
+      
+      return { hasMore };
     },
   })
 } as DataConnectorConfig;

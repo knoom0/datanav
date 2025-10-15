@@ -18,7 +18,6 @@ import { useState, useEffect } from "react";
 
 import { useAppTitle } from "@/components/app-title-context";
 import { DataConnectButton } from "@/components/data-connect-button";
-import logger from "@/lib/logger";
 
 // Force dynamic rendering
 export const dynamic = "force-dynamic";
@@ -99,12 +98,6 @@ export default function DataPage() {
     setSearchQuery("");
     setStatusFilter(null);
     setFilteredConnectors(connectors);
-  };
-
-  // Handle connector connect/disconnect events
-  const handleConnectorUpdate = () => {
-    // Reload connectors to get updated status
-    loadConnectors();
   };
 
   // Apply filters when dependencies change
@@ -212,10 +205,6 @@ export default function DataPage() {
               <DataConnectButton
                 key={connector.id}
                 connectorId={connector.id}
-                onConnectComplete={handleConnectorUpdate}
-                onError={(error) => {
-                  logger.error(`Connector error: ${error}`);
-                }}
               />
             ))}
           </SimpleGrid>
