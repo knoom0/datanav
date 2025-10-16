@@ -16,9 +16,10 @@ import {
 } from "@mantine/core"
 import { IconAlertCircle } from "@tabler/icons-react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { useState, Suspense } from "react"
+import { Suspense, useState } from "react"
 
 import { createClient } from "@/lib/supabase/client"
+import { isHostingEnabled } from "@/lib/util/hosting"
 
 function LoginPageContent() {
   const [email, setEmail] = useState("")
@@ -31,6 +32,29 @@ function LoginPageContent() {
   const searchParams = useSearchParams()
   const redirectTo = searchParams.get("redirectTo") || "/chat"
   
+  const hostingEnabled = isHostingEnabled()
+
+  if (!hostingEnabled) {
+    return (
+      <Container size={420} my={40}>
+        <Title ta="center" order={1} mb="md">
+          Welcome to DataNav
+        </Title>
+
+        <Text c="dimmed" size="sm" ta="center" mb="xl">
+          Authentication is currently disabled.
+        </Text>
+
+        <Paper withBorder shadow="md" p={30} mt={30} radius="md">
+          <Alert icon={<IconAlertCircle size="1rem" />} color="yellow">
+            Hosting features are disabled for this deployment, so signing in is
+            unavailable.
+          </Alert>
+        </Paper>
+      </Container>
+    )
+  }
+
   const supabase = createClient()
 
   const handleSignIn = async (e: React.FormEvent) => {

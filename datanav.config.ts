@@ -43,6 +43,7 @@ export const config = {
   },
 
   hosting: {
+    enabled: false,
   },
 
   job: {

@@ -14,33 +14,52 @@ import {
   IconChevronDown 
 } from "@tabler/icons-react"
 import { useRouter } from "next/navigation"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 
 import { createClient } from "@/lib/supabase/client"
+import { isHostingEnabled } from "@/lib/util/hosting"
 
 export function UserProfile() {
+  const hostingEnabled = isHostingEnabled()
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(false)
   const router = useRouter()
-  const supabase = createClient()
+
+  const supabase = useMemo(() => {
+    if (!hostingEnabled) {
+      return null
+    }
+    return createClient()
+  }, [hostingEnabled])
 
   useEffect(() => {
+    if (!supabase) {
+      setUser(null)
+      return
+    }
+
     const getUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      setUser(user)
+      const {
+        data: { user: supabaseUser },
+      } = await supabase.auth.getUser()
+      setUser(supabaseUser)
     }
     getUser()
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setUser(session?.user ?? null)
-      }
-    )
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_, session) => {
+      setUser(session?.user ?? null)
+    })
 
     return () => subscription.unsubscribe()
-  }, [supabase.auth])
+  }, [supabase])
 
   const handleSignOut = async () => {
+    if (!supabase) {
+      return
+    }
+
     setLoading(true)
     await supabase.auth.signOut()
     router.push("/auth/login")
@@ -48,7 +67,7 @@ export function UserProfile() {
     setLoading(false)
   }
 
-  if (!user) {
+  if (!hostingEnabled || !supabase || !user) {
     return null
   }
 

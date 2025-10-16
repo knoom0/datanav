@@ -2,8 +2,13 @@ import { NextRequest, NextResponse } from "next/server"
 
 import logger from "@/lib/logger"
 import { createClient } from "@/lib/supabase/server"
+import { isHostingEnabled } from "@/lib/util/hosting"
 
 export async function GET(request: NextRequest) {
+  if (!isHostingEnabled()) {
+    return NextResponse.json({ error: "Hosting features are disabled" }, { status: 404 })
+  }
+
   const { searchParams } = new URL(request.url)
   const code = searchParams.get("code")
   const redirectTo = searchParams.get("redirectTo") || "/chat"
