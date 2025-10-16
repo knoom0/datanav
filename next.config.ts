@@ -1,11 +1,7 @@
-import type { NextConfig } from "next"
-
-import { config as datanavConfig } from "./datanav.config"
+import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  env: {
-    NEXT_PUBLIC_HOSTING_ENABLED: String(datanavConfig.hosting?.enabled ?? false),
-  },
-}
+  /* config options here */
+};
 
-export default nextConfig
+export default nextConfig;
