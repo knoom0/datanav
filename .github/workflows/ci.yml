@@ -1,5 +1,9 @@
 name: ci
 
+permissions:
+  contents: read
+  statuses: write
+
 on:
   push:
     branches:
@@ -77,3 +81,4 @@ jobs:
         uses: vercel/repository-dispatch/actions/status@v1
         with:
           name: "Vercel - datanav: ci"
+          github_token: ${{ secrets.GITHUB_TOKEN }}
