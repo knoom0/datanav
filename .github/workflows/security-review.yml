@@ -17,4 +17,4 @@ jobs:
       - name: Run Claude security review
         uses: anthropics/claude-code-security-review@main
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
