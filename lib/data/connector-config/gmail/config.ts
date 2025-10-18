@@ -3,11 +3,10 @@ import { google } from "googleapis";
 
 import { DataConnectorConfig } from "@/lib/data/connector";
 import apiSpec from "@/lib/data/connector-config/gmail/api-spec.json";
-import { GoogleAPIDataLoader, GoogleAPIFetchParams } from "@/lib/data/loader/google-api-data-loader";
+import { GoogleAPIDataLoader, GoogleAPIFetchParams, MAX_LOOKBACK_DAYS } from "@/lib/data/loader/google-api-data-loader";
 import logger from "@/lib/logger";
 
 const MAX_RESULTS = 100; // Maximum allowed by Gmail API
-const LOOKBACK_DAYS = 365; // 1 year in days
 const BATCH_MAX_SIZE = 20; // Maximum number of requests per batch
 
 // Retry configuration for handling quota exceeded errors
@@ -22,15 +21,19 @@ export default {
   id: "gmail",
   name: "Gmail",
   description: "Loads Gmail messages with full details.",
-  openApiSpec: apiSpec,
-  resourceNames: ["Message"],
+  resources: [{ 
+    name: "Message",
+    createdAtColumn: "internalDate",
+    updatedAtColumn: "internalDate"
+  }],
   dataLoaderFactory: () => new GoogleAPIDataLoader({
+    openApiSpec: apiSpec,
     scopes: [
       "https://www.googleapis.com/auth/gmail.readonly"
     ],
     onFetch: async function* ({
       auth,
-      lastLoadedTime: _lastLoadedTime,
+      lastSyncedAt,
       syncContext,
     }: GoogleAPIFetchParams) { 
       // Create Gmail API client without batching for listing messages
@@ -53,16 +56,12 @@ export default {
         retryConfig: RETRY_CONFIG
       });
 
-      // Use stored lastMessageDate from previous fetch or start fresh
-      const lastMessageDate: string | undefined = syncContext?.lastMessageDate;
-      let latestMessageDate: string | null = null;
-
       // Build query parameters for message list
       const current = new Date();
-      const minDate = new Date(current.getTime() - (LOOKBACK_DAYS * 24 * 60 * 60 * 1000));
+      const minDate = new Date(current.getTime() - (MAX_LOOKBACK_DAYS * 24 * 60 * 60 * 1000));
       
-      // Use lastMessageDate if available for incremental sync, otherwise use lookback period
-      const afterDate = lastMessageDate ? new Date(lastMessageDate) : minDate;
+      // Use lastSyncedAt if available for incremental sync, otherwise use lookback period
+      const afterDate = lastSyncedAt || minDate;
       
       const queryParams: any = {
         userId: "me",
@@ -97,6 +96,9 @@ export default {
         messageChunks.push(validMessages.slice(i, i + BATCH_MAX_SIZE));
       }
 
+      // Track the latest message date for sync context
+      let latestMessageDate: string | undefined = syncContext?.lastMessageDate;
+
       // Process each chunk sequentially
       for (let chunkIndex = 0; chunkIndex < messageChunks.length; chunkIndex++) {
         const chunk = messageChunks[chunkIndex];
@@ -117,20 +119,28 @@ export default {
         // Execute batched requests for this chunk
         const messageResponses = await Promise.all(messagePromises);
 
-        // Collect successful responses and track latest message date
+        // Collect successful responses
         for (const messageResponse of messageResponses) {
           if (messageResponse?.data) {
-            yield { resourceName: "Message", ...messageResponse.data };
+            const messageData = messageResponse.data;
+            yield { resourceName: "Message", ...messageData };
             
-            // Track the latest message date from messages
-            const messageDate = messageResponse.data.internalDate;
-            if (messageDate && (!latestMessageDate || messageDate > latestMessageDate)) {
-              latestMessageDate = messageDate;
+            // Track the latest message date
+            if (messageData.internalDate) {
+              const messageDate = messageData.internalDate;
+              if (!latestMessageDate || messageDate > latestMessageDate) {
+                latestMessageDate = messageDate;
+              }
             }
           }
         }
 
         logger.info(`Completed chunk ${chunkIndex + 1}/${messageChunks.length}`);
+      }
+
+      // Update sync context with the latest message date
+      if (latestMessageDate && syncContext) {
+        syncContext.lastMessageDate = latestMessageDate;
       }
 
       // Check if we have more pages to fetch
@@ -150,12 +160,8 @@ export default {
         hasMore = true;
         logger.info("Setting hasMore=true due to nextPageToken and sufficient message count");
       } else {
-        // Store the latest message date for next fetch cycle
-        // If no messages were found, use current time as the baseline
-        const messageDateToStore = latestMessageDate || new Date().toISOString();
+        // Clear nextPageToken since we're done with pagination
         if (syncContext) {
-          syncContext.lastMessageDate = messageDateToStore;
-          // Clear nextPageToken since we're done with pagination
           delete syncContext.nextPageToken;
         }
         logger.info("Setting hasMore=false, clearing nextPageToken");

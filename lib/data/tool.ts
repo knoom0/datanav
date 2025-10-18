@@ -78,7 +78,7 @@ export class DataConnectorTool extends BaseAgentTool {
 
   private async askToConnect(connectorId: string): Promise<AskToConnectResult> {
     // Guard clause: validate connector exists
-    const config = this.dataCatalog.getConfig(connectorId);
+    const config = await this.dataCatalog.getConfig(connectorId);
     if (!config) {
       throw new ActionableError(`Connector with ID '${connectorId}' not found`);
     }
@@ -132,8 +132,8 @@ export class DataConnectorTool extends BaseAgentTool {
         const waitedMs = Date.now() - startTime;
         result.isConnected = status.isConnected || false;
         result.message = result.isConnected 
-          ? `User successfully connected to ${config.name} (responded in ${Math.round(waitedMs / 1000)}s)` 
-          : `User declined or failed to connect to ${config.name} (responded in ${Math.round(waitedMs / 1000)}s)`;
+          ? `User successfully connected to ${config?.name} (responded in ${Math.round(waitedMs / 1000)}s)` 
+          : `User declined or failed to connect to ${config?.name} (responded in ${Math.round(waitedMs / 1000)}s)`;
         
         logger.info(`User responded to connection request for ${connectorId}, connected: ${result.isConnected}`);
         break;
@@ -146,7 +146,7 @@ export class DataConnectorTool extends BaseAgentTool {
         
         const waitedMs = Date.now() - startTime;
         result.isConnected = true;
-        result.message = `User successfully connected to ${config.name} (connected in ${Math.round(waitedMs / 1000)}s)`;
+        result.message = `User successfully connected to ${config?.name} (connected in ${Math.round(waitedMs / 1000)}s)`;
         
         logger.info(`User connected to ${connectorId} during wait period`);
         break;
@@ -168,7 +168,7 @@ export class DataConnectorTool extends BaseAgentTool {
       // Check final status
       const finalStatus = await statusRepo.findOne({ where: { connectorId } });
       result.isConnected = finalStatus?.isConnected || false;
-      result.message = `Connection request for ${config.name} timed out after ${Math.round(waitedMs / 1000)}s. Current status: ${result.isConnected ? "connected" : "not connected"}`;
+      result.message = `Connection request for ${config?.name} timed out after ${Math.round(waitedMs / 1000)}s. Current status: ${result.isConnected ? "connected" : "not connected"}`;
     }
     
     return result;

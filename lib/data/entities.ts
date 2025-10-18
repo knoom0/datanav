@@ -1,4 +1,6 @@
+import "server-only";
 import "reflect-metadata";
+
 import { DataSource, Entity, PrimaryColumn, PrimaryGeneratedColumn, Column, BaseEntity, type DataSourceOptions, Unique, CreateDateColumn, UpdateDateColumn } from "typeorm";
 
 import { getUserDataSourceOptions } from "@/lib/hosting/user-database";
@@ -63,6 +65,39 @@ export class ComponentInfoEntity extends BaseEntity {
     updatedAt!: Date;
 }
 
+@Entity({ name: "data_connector_config", schema: SCHEMA_NAME })
+export class DataConnectorConfigEntity extends BaseEntity {
+  @PrimaryColumn({ type: "varchar" })
+    id!: string;
+
+  @Column({ type: "varchar" })
+    name!: string;
+
+  @Column({ type: "text" })
+    description!: string;
+
+  @Column({ type: "json", nullable: true })
+    openApiSpec!: string | object | null;
+
+  @Column({ type: "json", nullable: true })
+    resourceNames!: string[] | null;
+
+  @Column({ type: "json", nullable: true })
+    resources!: Array<{ name: string; createdAtColumn?: string; updatedAtColumn?: string }> | null;
+
+  @Column({ type: "text" })
+    dataLoaderType!: string;
+
+  @Column({ type: "json", nullable: true })
+    dataLoaderConfig!: Record<string, any> | null;
+
+  @CreateDateColumn()
+    createdAt!: Date;
+
+  @UpdateDateColumn()
+    updatedAt!: Date;
+}
+
 @Entity({ name: "data_connector_status", schema: SCHEMA_NAME })
 export class DataConnectorStatusEntity extends BaseEntity {
   @PrimaryColumn({ type: "varchar" })
@@ -87,7 +122,7 @@ export class DataConnectorStatusEntity extends BaseEntity {
     lastConnectedAt!: Date | null;
 
   @Column({ type: Date, nullable: true })
-    lastLoadedAt!: Date | null;
+    lastSyncedAt!: Date | null;
 
   @Column({ type: "text", nullable: true })
     lastError!: string | null;
@@ -124,7 +159,7 @@ export class DataTableStatusEntity extends BaseEntity {
     tableName!: string;
 
   @Column({ type: Date, nullable: true })
-    lastLoadedAt!: Date | null;
+    lastSyncedAt!: Date | null;
 
   @CreateDateColumn()
     createdAt!: Date;
@@ -177,6 +212,9 @@ export class DataJobEntity extends BaseEntity {
       [key: string]: any;
     } | null;
 
+  @Column({ type: "text", nullable: true })
+    error!: string | null;
+
   @Column({ type: Date, nullable: true })
     startedAt!: Date | null;
 
@@ -195,7 +233,7 @@ export type DataRecord = {
   [key: string]: any;
 };
 
-export const ENTITIES = [UIBundleEntity, ComponentInfoEntity, DataConnectorStatusEntity, DataTableStatusEntity, DataSpecEntity, DataJobEntity] as const;
+export const ENTITIES = [UIBundleEntity, ComponentInfoEntity, DataConnectorConfigEntity, DataConnectorStatusEntity, DataTableStatusEntity, DataSpecEntity, DataJobEntity] as const;
 
 // Common database options shared across all user data sources
 const COMMON_DATABASE_OPTIONS = {
@@ -258,7 +296,6 @@ export async function getUserDataSource(): Promise<DataSource> {
       ...baseDataSourceOptions,
     };
 
-    logger.info(`Creating user data source for user ${userId} with options: ${JSON.stringify(dataSourceOptions)}`);
     userDataSource = new DataSource(dataSourceOptions);
     userDataSources.set(userId, userDataSource);
   }

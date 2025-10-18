@@ -57,20 +57,20 @@ describe("DataWriter", () => {
       expect(status).toBeTruthy();
       expect(status!.connectorId).toBe("test.connector");
       expect(status!.tableName).toBe("test_connector.test_table");
-      expect(status!.lastLoadedAt).toBeTruthy();
+      expect(status!.lastSyncedAt).toBeTruthy();
     });
 
-    it("should use provided lastLoadedAt when specified", async () => {
+    it("should use provided lastSyncedAt when specified", async () => {
       const resourceName = "test_table_custom_date";
       const customDate = new Date("2023-01-01T00:00:00Z");
 
-      // Create status with custom lastLoadedAt
-      await dataWriter.updateTableStatus({ resourceName, lastLoadedAt: customDate });
+      // Create status with custom lastSyncedAt
+      await dataWriter.updateTableStatus({ resourceName, lastSyncedAt: customDate });
 
       // Verify status was created with custom date
       const status = await dataWriter.getTableStatus(resourceName);
       expect(status).toBeTruthy();
-      expect(status!.lastLoadedAt).toEqual(customDate);
+      expect(status!.lastSyncedAt).toEqual(customDate);
     });
   });
 
@@ -96,7 +96,10 @@ describe("DataWriter", () => {
         required: ["user_id"]
       };
 
-      await dataWriter.syncTableSchema(resourceName, schema);
+      await dataWriter.syncTableSchema({
+        resourceConfig: { name: resourceName, idColumn: "user_id" },
+        schema
+      });
 
       // Test that we can insert into the table (which proves it exists with the right columns)
       await testDataSource.query(`INSERT INTO ${tableName} (user_id, name, age) VALUES ($1, $2, $3)`, ["test1", "Test User", 25]);
@@ -110,7 +113,7 @@ describe("DataWriter", () => {
   });
 
   describe("syncTableRecords", () => {
-    it("should sync records to table", async () => {
+    it("should sync records to table with custom ID column", async () => {
       const resourceName = "test_write_table";
       const tableName = "test_connector.test_write_table"; // Expected table name format
       const schema: OpenAPIV3.SchemaObject = {
@@ -128,13 +131,173 @@ describe("DataWriter", () => {
         { record_id: "2", name: "Jane", age: 25 }
       ];
 
-      await dataWriter.syncTableRecords(resourceName, schema, records);
+      await dataWriter.syncTableRecords({
+        resourceConfig: { name: resourceName, idColumn: "record_id" },
+        schema,
+        records
+      });
 
       // Verify records were inserted
       const result = await testDataSource.query(`SELECT * FROM ${tableName} ORDER BY record_id`);
       expect(result).toHaveLength(2);
       expect(result[0].name).toBe("John");
       expect(result[1].name).toBe("Jane");
+    });
+
+    it("should auto-detect id field", async () => {
+      const resourceName = "test_id_field";
+      const tableName = "test_connector.test_id_field";
+      const schema: OpenAPIV3.SchemaObject = {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          name: { type: "string" }
+        }
+      };
+
+      const records = [
+        { id: "1", name: "Test 1" },
+        { id: "2", name: "Test 2" }
+      ];
+
+      await dataWriter.syncTableRecords({
+        resourceConfig: { name: resourceName },
+        schema,
+        records
+      });
+
+      const result = await testDataSource.query(`SELECT * FROM ${tableName} ORDER BY id`);
+      expect(result).toHaveLength(2);
+      expect(result[0].name).toBe("Test 1");
+    });
+
+    it("should auto-detect uuid field", async () => {
+      const resourceName = "test_uuid_field";
+      const tableName = "test_connector.test_uuid_field";
+      const schema: OpenAPIV3.SchemaObject = {
+        type: "object",
+        properties: {
+          uuid: { type: "string" },
+          name: { type: "string" }
+        }
+      };
+
+      const records = [
+        { uuid: "uuid-1", name: "Test 1" },
+        { uuid: "uuid-2", name: "Test 2" }
+      ];
+
+      await dataWriter.syncTableRecords({
+        resourceConfig: { name: resourceName },
+        schema,
+        records
+      });
+
+      const result = await testDataSource.query(`SELECT * FROM ${tableName} ORDER BY uuid`);
+      expect(result).toHaveLength(2);
+      expect(result[0].name).toBe("Test 1");
+    });
+
+    it("should auto-detect guid field", async () => {
+      const resourceName = "test_guid_field";
+      const tableName = "test_connector.test_guid_field";
+      const schema: OpenAPIV3.SchemaObject = {
+        type: "object",
+        properties: {
+          guid: { type: "string" },
+          name: { type: "string" }
+        }
+      };
+
+      const records = [
+        { guid: "guid-1", name: "Test 1" },
+        { guid: "guid-2", name: "Test 2" }
+      ];
+
+      await dataWriter.syncTableRecords({
+        resourceConfig: { name: resourceName },
+        schema,
+        records
+      });
+
+      const result = await testDataSource.query(`SELECT * FROM ${tableName} ORDER BY guid`);
+      expect(result).toHaveLength(2);
+      expect(result[0].name).toBe("Test 1");
+    });
+
+    it("should throw error when no ID field found", async () => {
+      const resourceName = "test_no_id_field";
+      const schema: OpenAPIV3.SchemaObject = {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          age: { type: "integer" }
+        }
+      };
+
+      const records = [{ name: "Test", age: 30 }];
+
+      await expect(
+        dataWriter.syncTableRecords({
+          resourceConfig: { name: resourceName },
+          schema,
+          records
+        })
+      ).rejects.toThrow("No ID field found in schema");
+    });
+
+    it("should throw error when custom ID column not found in schema", async () => {
+      const resourceName = "test_invalid_custom_id";
+      const schema: OpenAPIV3.SchemaObject = {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          name: { type: "string" }
+        }
+      };
+
+      const records = [{ id: "1", name: "Test" }];
+
+      await expect(
+        dataWriter.syncTableRecords({
+          resourceConfig: { name: resourceName, idColumn: "nonexistent_id" },
+          schema,
+          records
+        })
+      ).rejects.toThrow('Custom ID column "nonexistent_id" not found in schema properties');
+    });
+
+    it("should filter out records with null or undefined ID values", async () => {
+      const resourceName = "test_null_ids";
+      const tableName = "test_connector.test_null_ids";
+      const schema: OpenAPIV3.SchemaObject = {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          name: { type: "string" }
+        }
+      };
+
+      const records = [
+        { id: "1", name: "Valid 1" },
+        { id: null, name: "Null ID" },
+        { id: "2", name: "Valid 2" },
+        { id: undefined, name: "Undefined ID" },
+        { id: "3", name: "Valid 3" }
+      ];
+
+      await dataWriter.syncTableRecords({
+        resourceConfig: { name: resourceName },
+        schema,
+        records
+      });
+
+      // Should only have 3 valid records
+      const result = await testDataSource.query(`SELECT * FROM ${tableName} ORDER BY id`);
+      expect(result).toHaveLength(3);
+      expect(result[0].name).toBe("Valid 1");
+      expect(result[1].name).toBe("Valid 2");
+      expect(result[2].name).toBe("Valid 3");
     });
 
     it("should handle invalid date values gracefully by setting them to null", async () => {
@@ -178,7 +341,11 @@ describe("DataWriter", () => {
         }
       ];
 
-      await dataWriter.syncTableRecords(resourceName, schema, records);
+      await dataWriter.syncTableRecords({
+        resourceConfig: { name: resourceName, idColumn: "event_id" },
+        schema,
+        records
+      });
 
       // Verify records were inserted with invalid dates set to null
       const result = await testDataSource.query(`SELECT * FROM ${tableName} ORDER BY event_id`);
@@ -223,7 +390,10 @@ describe("DataWriter", () => {
         required: ["id"]
       };
 
-      await dataWriter.syncTableSchema(resourceName, schema);
+      await dataWriter.syncTableSchema({
+        resourceConfig: { name: resourceName },
+        schema
+      });
 
       // Verify that reserved keywords were mapped to safe column names
       const result = await testDataSource.query(`
@@ -262,7 +432,11 @@ describe("DataWriter", () => {
         { id: "2", select: "value2", name: "Test2" }
       ];
 
-      await dataWriter.syncTableRecords(resourceName, schema, records);
+      await dataWriter.syncTableRecords({
+        resourceConfig: { name: resourceName },
+        schema,
+        records
+      });
 
       // Verify records were inserted with correct column mapping
       const result = await testDataSource.query(`SELECT * FROM ${tableName} ORDER BY id`);
@@ -286,7 +460,10 @@ describe("DataWriter", () => {
         required: ["id"]
       };
 
-      await dataWriter.syncTableSchema(resourceName, schema);
+      await dataWriter.syncTableSchema({
+        resourceConfig: { name: resourceName },
+        schema
+      });
 
       // Verify that all case variations of reserved keywords were mapped
       const result = await testDataSource.query(`

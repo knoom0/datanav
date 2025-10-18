@@ -187,8 +187,8 @@ describeIf(
       
       // Verify the authentication and API call process completed successfully
       const status = await connector.getStatus();
-      expect(status?.lastLoadedAt).toBeDefined();
-      expect(status?.lastLoadedAt).toBeInstanceOf(Date);
+      expect(status?.lastSyncedAt).toBeDefined();
+      expect(status?.lastSyncedAt).toBeInstanceOf(Date);
       
       // Verify tables were created
       const dbClient = new DatabaseClient(testDataSource);
@@ -262,7 +262,7 @@ describeIf(
       status = await connector.getStatus();
       expect(status?.syncContext).toBeDefined();
       expect(status?.syncContext?.lastMessageDate).toBeDefined();
-      expect(status?.lastLoadedAt).toBeDefined();
+      expect(status?.lastSyncedAt).toBeDefined();
       expect(status?.isConnected).toBe(true);
     });
   });

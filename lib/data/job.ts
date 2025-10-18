@@ -74,16 +74,23 @@ export class DataJobScheduler {
    * Can be used for error, canceled, or other terminal states
    * @param params.job - Job to stop
    * @param params.result - The result type (error, canceled, etc.)
+   * @param params.error - Optional error message for failed jobs
    */
   private async stopJob(params: {
     job: DataJobEntity;
     result: JobResultType;
+    error?: string;
   }): Promise<void> {
-    const { job, result } = params;
+    const { job, result, error } = params;
     logger.info(`Stopping job ${job.id} with result: ${result}`);
     
     // Set finished time
     job.finishedAt = new Date();
+    
+    // Set error message if provided
+    if (error) {
+      job.error = error;
+    }
     
     // Update job state to finished with the specified result
     await this.updateJobState({ job, state: JobState.FINISHED, result });
@@ -228,12 +235,19 @@ export class DataJobScheduler {
       
     } catch (error) {
       // Use the helper function to stop the job with error result and clear connector status
+      const errorMessage = safeErrorString(error);
       await this.stopJob({ 
         job, 
-        result: JobResult.ERROR
+        result: JobResult.ERROR,
+        error: errorMessage
       });
       
-      logger.error(`Job ${id} failed: ${safeErrorString(error)}`);
+      // Log error with full stack trace
+      if (error instanceof Error && error.stack) {
+        logger.error(`Job ${id} failed: ${errorMessage}\nStack trace:\n${error.stack}`);
+      } else {
+        logger.error(`Job ${id} failed: ${errorMessage}`);
+      }
       // Return gracefully instead of throwing to prevent unhandled promise rejections
       // in after() blocks or background jobs
     }

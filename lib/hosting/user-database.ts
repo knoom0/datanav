@@ -4,6 +4,8 @@ import { getConfig } from "@/lib/config";
 import { UserDatabaseConfig, getHostingDataSource } from "@/lib/hosting/entities";
 import logger from "@/lib/logger";
 
+// PostgreSQL's default administrative database used for maintenance operations like creating new databases
+const POSTGRES_ADMIN_DATABASE = "postgres";
 
 /**
  * Get user database configuration
@@ -19,6 +21,40 @@ export async function getUserDatabaseConfig(userId: string): Promise<UserDatabas
 
 
 /**
+ * Create a database if it doesn't exist
+ * Handles race conditions by catching "duplicate database" errors
+ */
+async function createDatabaseIfNotExist(databaseName: string): Promise<void> {
+  const config = getConfig();
+  const adminDataSource = new DataSource({
+    ...config.database,
+    database: POSTGRES_ADMIN_DATABASE,
+  });
+  
+  try {
+    await adminDataSource.initialize();
+    
+    // Try to create the database directly
+    // PostgreSQL doesn't have CREATE DATABASE IF NOT EXISTS, so we catch the error
+    logger.info(`Creating database: ${databaseName}`);
+    await adminDataSource.query(`CREATE DATABASE "${databaseName}"`);
+    logger.info(`Successfully created database: ${databaseName}`);
+  } catch (error) {
+    // Check if error is "database already exists" (PostgreSQL error code 42P04)
+    if (error instanceof Error && (error as any).code === "42P04") {
+      logger.debug(`Database ${databaseName} already exists, skipping creation`);
+    } else {
+      // Re-throw other errors
+      throw error;
+    }
+  } finally {
+    if (adminDataSource.isInitialized) {
+      await adminDataSource.destroy();
+    }
+  }
+}
+
+/**
  * Setup a new database for a user and save the configuration
  */
 export async function setupUserDatabase(userId: string): Promise<UserDatabaseConfig> {
@@ -30,61 +66,30 @@ export async function setupUserDatabase(userId: string): Promise<UserDatabaseCon
   const userConfigRepo = hostingDataSource.getRepository(UserDatabaseConfig);
   
   // Check if user config already exists
-  logger.debug(`Checking for existing database configuration for user ${userId}`);
   const existingConfig = await userConfigRepo.findOne({
     where: { userId }
   });
   
   if (existingConfig) {
-    logger.warn(`Database configuration already exists for user ${userId} with database: ${existingConfig.databaseName}`);
+    logger.warn(`Database configuration already exists for user ${userId}`);
     throw new Error(`Database configuration already exists for user: ${userId}`);
   }
   
-  // Get the main database connection to create the new database
-  logger.debug("Retrieving database configuration for admin connection");
-  const config = getConfig();
-  const adminDataSource = new DataSource({
-    ...config.database,
-    // Connect to the default postgres database to create new databases
-    database: "postgres",
+  // Create the database if it doesn't exist
+  await createDatabaseIfNotExist(databaseName);
+  
+  // Save the database configuration
+  const userConfig = userConfigRepo.create({
+    userId,
+    databaseName,
+    isExternal: false,
+    externalConnectionString: null,
   });
   
-  try {
-    logger.debug("Initializing admin database connection");
-    await adminDataSource.initialize();
-    logger.debug("Admin database connection initialized successfully");
-    
-    // Create the user-specific database
-    logger.info(`Creating database: ${databaseName}`);
-    await adminDataSource.query(`CREATE DATABASE "${databaseName}"`);
-    logger.info(`Successfully created database: ${databaseName}`);
-    
-    // Save the database configuration
-    logger.debug(`Creating user database configuration record for user ${userId}`);
-    const userConfig = userConfigRepo.create({
-      userId,
-      databaseName,
-      isExternal: false,
-      externalConnectionString: null,
-    });
-    
-    const savedConfig = await userConfigRepo.save(userConfig);
-    logger.info(`Successfully saved database configuration for user ${userId}`);
-    
-    logger.info(`Database setup completed successfully for user ${userId}`);
-    
-    return savedConfig;
-    
-  } catch (error) {
-    logger.error(`Failed to setup database for user ${userId}: ${error instanceof Error ? error.message : String(error)}`);
-    throw error;
-  } finally {
-    if (adminDataSource.isInitialized) {
-      logger.debug("Closing admin database connection");
-      await adminDataSource.destroy();
-      logger.debug("Admin database connection closed");
-    }
-  }
+  const savedConfig = await userConfigRepo.save(userConfig);
+  logger.info(`Database setup completed successfully for user ${userId}`);
+  
+  return savedConfig;
 }
 
 /**
@@ -97,6 +102,11 @@ export async function getUserDataSourceOptions(userId: string): Promise<DataSour
   if (!userConfig) {
     logger.info(`No database configuration found for user ${userId}, setting up new database`);
     userConfig = await setupUserDatabase(userId);
+  }
+  
+  // Ensure the database exists (handles recovery from missing databases)
+  if (!userConfig.isExternal) {
+    await createDatabaseIfNotExist(userConfig.databaseName);
   }
   
   const config = getConfig();
