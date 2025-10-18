@@ -28,7 +28,7 @@ describe("DataConnectButton", () => {
       name: "Google Calendar",
       description: "Connect to Google Calendar for event data",
       isConnected: false,
-      lastLoadedAt: null,
+      lastSyncedAt: null,
     };
 
     mockFetch.mockResolvedValueOnce({
@@ -62,7 +62,7 @@ describe("DataConnectButton", () => {
       name: "Google Calendar",
       description: "Connect to Google Calendar for event data",
       isConnected: false,
-      lastLoadedAt: null,
+      lastSyncedAt: null,
     };
 
     const mockConnectResult = {
@@ -73,7 +73,7 @@ describe("DataConnectButton", () => {
     const mockUpdatedConnectorInfo = {
       ...mockConnectorInfo,
       isConnected: true,
-      lastLoadedAt: new Date().toISOString(),
+      lastSyncedAt: new Date().toISOString(),
     };
 
     // Mock initial connector info fetch

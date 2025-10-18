@@ -117,13 +117,14 @@ export async function simulateUserDecline(
   logger.info(`Waiting for ask_to_connect request to be initiated for ${connectorId}`);
   
   // Wait for the ask_to_connect to set the askedToConnectUntil field
+  // Use a longer timeout since the agent may need time to discover connectors and decide to ask
   const status = await poll({
     callback: async () => {
       const repo = dataSource.getRepository(DataConnectorStatusEntity);
       const entity = await repo.findOne({ where: { connectorId } });
       return entity?.askedToConnectUntil ? entity : null;
     },
-    timeoutMs: 5000,
+    timeoutMs: 30000, // Increased from 5000ms to 30000ms
     pollIntervalMs: 100
   });
   

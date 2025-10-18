@@ -4,6 +4,7 @@ import { DataSource } from "typeorm";
 import { DatabaseClient } from "@/lib/data/db-client";
 import { DataTableStatusEntity } from "@/lib/data/entities";
 import logger from "@/lib/logger";
+import type { ResourceConfig } from "@/lib/types";
 
 // SQL reserved keywords that need to be escaped or renamed
 const SQL_RESERVED_KEYWORDS = new Set([
@@ -102,16 +103,23 @@ export class DataWriter {
    * Gets the schema name from the connector ID
    */
   private getSchemaName(): string {
-    return this.connectorId.replace(/\./g, "_"); // Replace dots for valid SQL identifiers
+    return this.connectorId.replace(/[.-]/g, "_"); // Replace dots and dashes for valid SQL identifiers
   }
 
   /**
-   * Formats the table name as {connectorId}.{resourceName}
-   * Uses connector ID as schema name and resource name as table name
+   * Gets the table name from resource name (without schema prefix)
    */
   private getTableName(resourceName: string): string {
+    return resourceName.toLowerCase();
+  }
+
+  /**
+   * Gets the fully qualified table name as {schema}.{table}
+   */
+  private getQualifiedTableName(resourceName: string): string {
     const schemaName = this.getSchemaName();
-    return `${schemaName}.${resourceName.toLowerCase()}`;
+    const tableName = this.getTableName(resourceName);
+    return `${schemaName}.${tableName}`;
   }
 
   /**
@@ -127,42 +135,42 @@ export class DataWriter {
    */
   async updateTableStatus(params: {
     resourceName: string;
-    lastLoadedAt?: Date;
+    lastSyncedAt?: Date;
   }): Promise<void> {
-    const { resourceName, lastLoadedAt } = params;
-    const tableName = this.getTableName(resourceName);
+    const { resourceName, lastSyncedAt } = params;
+    const qualifiedTableName = this.getQualifiedTableName(resourceName);
     const repo = this.dataSource.getRepository(DataTableStatusEntity);
     
     let tableStatus = await repo.findOne({
-      where: { connectorId: this.connectorId, tableName }
+      where: { connectorId: this.connectorId, tableName: qualifiedTableName }
     });
     
     if (!tableStatus) {
       tableStatus = new DataTableStatusEntity();
       tableStatus.connectorId = this.connectorId;
-      tableStatus.tableName = tableName;
+      tableStatus.tableName = qualifiedTableName;
     }
     
-    if (lastLoadedAt !== undefined) {
-      tableStatus.lastLoadedAt = lastLoadedAt;
+    if (lastSyncedAt !== undefined) {
+      tableStatus.lastSyncedAt = lastSyncedAt;
     } else {
-      tableStatus.lastLoadedAt = new Date();
+      tableStatus.lastSyncedAt = new Date();
     }
     tableStatus.updatedAt = new Date();
     
     await repo.save(tableStatus);
-    logger.info(`Updated table status for ${tableName} (connector: ${this.connectorId})`);
+    logger.info(`Updated table status for ${qualifiedTableName} (connector: ${this.connectorId})`);
   }
 
   /**
    * Gets the table status for a specific resource
    */
   async getTableStatus(resourceName: string): Promise<DataTableStatusEntity | null> {
-    const tableName = this.getTableName(resourceName);
+    const qualifiedTableName = this.getQualifiedTableName(resourceName);
     const repo = this.dataSource.getRepository(DataTableStatusEntity);
     
     return await repo.findOne({
-      where: { connectorId: this.connectorId, tableName }
+      where: { connectorId: this.connectorId, tableName: qualifiedTableName }
     });
   }
 
@@ -189,11 +197,11 @@ export class DataWriter {
   /**
    * Gets the current table schema from PostgreSQL
    */
-  private async getTableSchema(tableName: string): Promise<Record<string, { type: string, isPrimaryKey: boolean }>> {
-    // Extract schema and table name from qualified table name
-    const parts = tableName.split(".");
-    const schemaName = parts.length > 1 ? parts[0] : "public";
-    const tableNameOnly = parts.length > 1 ? parts[1] : tableName;
+  private async getTableSchema(params: {
+    schemaName: string;
+    tableName: string;
+  }): Promise<Record<string, { type: string, isPrimaryKey: boolean }>> {
+    const { schemaName, tableName } = params;
     
     const query = `
       SELECT 
@@ -212,7 +220,7 @@ export class DataWriter {
       WHERE c.table_name = $1
         AND c.table_schema = $2
     `;
-    const result = await this.dbClient.query(query, [tableNameOnly, schemaName]);
+    const result = await this.dbClient.query(query, [tableName, schemaName]);
     return result.reduce((acc, row) => {
       acc[row.column_name] = {
         type: `${row.data_type}${row.is_nullable === "NO" ? " NOT NULL" : ""}`,
@@ -225,71 +233,142 @@ export class DataWriter {
   /**
    * Sets the comment on a PostgreSQL table
    */
-  private async setTableComment(tableName: string, comment: string): Promise<void> {
+  private async setTableComment(params: {
+    schemaName: string;
+    tableName: string;
+    comment: string;
+  }): Promise<void> {
+    const { schemaName, tableName, comment } = params;
     // Escape single quotes in the comment
     const escapedComment = comment.replace(/'/g, "''");
-    const query = `COMMENT ON TABLE ${tableName} IS '${escapedComment}'`;
+    const qualifiedTableName = `${schemaName}.${tableName}`;
+    const query = `COMMENT ON TABLE ${qualifiedTableName} IS '${escapedComment}'`;
     await this.dbClient.query(query);
   }
 
   /**
    * Sets the comment on a PostgreSQL column
    */
-  private async setColumnComment(tableName: string, columnName: string, comment: string): Promise<void> {
+  private async setColumnComment(params: {
+    schemaName: string;
+    tableName: string;
+    columnName: string;
+    comment: string;
+  }): Promise<void> {
+    const { schemaName, tableName, columnName, comment } = params;
     // Escape single quotes in the comment
     const escapedComment = comment.replace(/'/g, "''");
     // Quote column name to preserve case
     const quotedColumnName = `"${columnName}"`;
-    const query = `COMMENT ON COLUMN ${tableName}.${quotedColumnName} IS '${escapedComment}'`;
+    const qualifiedTableName = `${schemaName}.${tableName}`;
+    const query = `COMMENT ON COLUMN ${qualifiedTableName}.${quotedColumnName} IS '${escapedComment}'`;
     await this.dbClient.query(query);
   }
 
   /**
-   * Finds the primary key column from schema properties
-   * Looks for id field first, then any field ending with _id
+   * Finds the ID field from schema properties
+   * Looks for common ID field names: id, uuid, guid
+   * Can also use a custom ID column name if provided
+   * @param schema - The OpenAPI schema object
+   * @param customIdColumn - Optional custom ID column name to use
+   * @returns The ID field name, or throws an error if not found
    */
-  private findPrimaryKeyColumn(schema: OpenAPIV3.SchemaObject): string | null {
-    if (!schema.properties) return null;
+  private findIdField(params: { 
+    schema: OpenAPIV3.SchemaObject; 
+    customIdColumn?: string;
+  }): string {
+    const { schema, customIdColumn } = params;
     
-    // First try to find id field (even if not required)
-    if (schema.properties.id) {
-      return "id";
+    if (!schema.properties) {
+      throw new Error("Schema must have properties defined");
     }
     
-    // Then try to find a required property with _id suffix
-    const requiredIdColumn = schema.required?.find(prop => 
-      prop.endsWith("_id") && schema.properties?.[prop]
+    // If custom ID column is provided, verify it exists in schema
+    if (customIdColumn) {
+      if (schema.properties[customIdColumn]) {
+        return customIdColumn;
+      }
+      throw new Error(`Custom ID column "${customIdColumn}" not found in schema properties`);
+    }
+    
+    // Look for common ID field names
+    const commonIdFields = ["id", "uuid", "guid"];
+    for (const fieldName of commonIdFields) {
+      if (schema.properties[fieldName]) {
+        return fieldName;
+      }
+    }
+    
+    // If no ID field found, throw an error
+    const availableFields = Object.keys(schema.properties).join(", ");
+    throw new Error(
+      `No ID field found in schema. Tried: ${commonIdFields.join(", ")}. ` +
+      `Available fields: ${availableFields}. ` +
+      "Please specify an idColumn in ResourceConfig."
     );
+  }
+
+  /**
+   * Filters records to only include those with valid (non-null, non-undefined) ID values
+   * @param records - Array of records to filter
+   * @param idField - The ID field name
+   * @param resourceName - Resource name for logging purposes
+   * @returns Array of valid records
+   */
+  private filterValidRecords(params: {
+    records: Array<Record<string, any>>;
+    idField: string;
+    resourceName: string;
+  }): Array<Record<string, any>> {
+    const { records, idField, resourceName } = params;
     
-    if (requiredIdColumn) return requiredIdColumn;
+    const validRecords = [];
+    let nullIdCount = 0;
     
-    // If no id field found, return null
-    return null;
+    for (const record of records) {
+      if (record[idField] === null || record[idField] === undefined) {
+        nullIdCount++;
+        continue;
+      }
+      validRecords.push(record);
+    }
+    
+    if (nullIdCount > 0) {
+      logger.warn(
+        `Filtered out ${nullIdCount} record(s) with null/undefined ${idField} ` +
+        `for resource ${resourceName}`
+      );
+    }
+    
+    return validRecords;
   }
 
   /**
    * Syncs a table with the given schema, creating or updating it as needed
    */
-  async syncTableSchema(
-    resourceName: string, 
-    schema: OpenAPIV3.SchemaObject
-  ): Promise<void> {
+  async syncTableSchema(params: {
+    resourceConfig: ResourceConfig;
+    schema: OpenAPIV3.SchemaObject;
+  }): Promise<void> {
+    const { resourceConfig, schema } = params;
+    const { name: resourceName, idColumn } = resourceConfig;
+    
     // Ensure schema exists before creating table
     await this.ensureSchemaExists();
     
+    const schemaName = this.getSchemaName();
     const tableName = this.getTableName(resourceName);
+    const qualifiedTableName = `${schemaName}.${tableName}`;
+    
     if (!schema.properties) {
-      throw new Error(`Schema for table ${tableName} must have properties defined`);
+      throw new Error(`Schema for table ${qualifiedTableName} must have properties defined`);
     }
 
-    // Find primary key column
-    const primaryKeyColumn = this.findPrimaryKeyColumn(schema);
-    if (!primaryKeyColumn) {
-      throw new Error(`No primary key column found for table ${tableName}. Please add a required property with _id suffix.`);
-    }
+    // Find primary key column using the new ID field detection
+    const primaryKeyColumn = this.findIdField({ schema, customIdColumn: idColumn });
 
     // Get current table schema if it exists
-    const currentSchema = await this.getTableSchema(tableName);
+    const currentSchema = await this.getTableSchema({ schemaName, tableName });
     const tableExists = Object.keys(currentSchema).length > 0;
 
     // Generate new schema - make all fields nullable by default unless explicitly required
@@ -316,7 +395,7 @@ export class DataWriter {
       });
       
       await this.dbClient.query(`
-        CREATE TABLE ${tableName} (
+        CREATE TABLE ${qualifiedTableName} (
           ${columns.join(",\n      ")}
         );
       `);
@@ -360,6 +439,7 @@ export class DataWriter {
       const currentPrimaryKey = Object.entries(currentSchema).find(([, col]) => col.isPrimaryKey)?.[0];
       if (mappedPrimaryKeyColumn !== currentPrimaryKey) {
         if (currentPrimaryKey) {
+          // Use table name only (without schema) for constraint name
           alterQueries.push(`DROP CONSTRAINT IF EXISTS ${tableName}_pkey`);
         }
         if (mappedPrimaryKeyColumn) {
@@ -377,8 +457,9 @@ export class DataWriter {
       }
 
       if (alterQueries.length > 0) {
+        logger.info(`ALTER TABLE ${qualifiedTableName} ${alterQueries.join(",\n")}`);
         await this.dbClient.query(`
-          ALTER TABLE ${tableName}
+          ALTER TABLE ${qualifiedTableName}
           ${alterQueries.join(",\n")};
         `);
       }
@@ -386,42 +467,72 @@ export class DataWriter {
 
     // Set table and column comments
     if (schema.description) {
-      await this.setTableComment(tableName, schema.description);
+      await this.setTableComment({ 
+        schemaName, 
+        tableName, 
+        comment: schema.description 
+      });
     }
 
     for (const [name, prop] of Object.entries(schema.properties)) {
       const schemaProp = prop as OpenAPIV3.SchemaObject;
       if (schemaProp.description) {
         const columnName = this.mapPropertyToColumnName(name);
-        await this.setColumnComment(tableName, columnName, schemaProp.description);
+        await this.setColumnComment({ 
+          schemaName, 
+          tableName, 
+          columnName, 
+          comment: schemaProp.description 
+        });
       }
     }
 
     // Update table status after schema sync
     await this.updateTableStatus({ resourceName });
-    logger.info(`Updated table status for ${tableName} after schema sync`);
+    logger.info(`Updated table status for ${qualifiedTableName} after schema sync`);
   }
 
   /**
    * Syncs records to a table, handling both inserts and updates
    */
-  async syncTableRecords(
-    resourceName: string,
-    schema: OpenAPIV3.SchemaObject,
-    records: Array<Record<string, any>>
-  ): Promise<number> {
+  async syncTableRecords(params: {
+    resourceConfig: ResourceConfig;
+    schema: OpenAPIV3.SchemaObject;
+    records: Array<Record<string, any>>;
+  }): Promise<number> {
+    const { resourceConfig, schema, records } = params;
+    const { name: resourceName, idColumn: customIdColumn } = resourceConfig;
+    
     if (records.length === 0) return 0;
 
     // Ensure table is in sync with schema
-    await this.syncTableSchema(resourceName, schema);
+    await this.syncTableSchema({ 
+      resourceConfig, 
+      schema 
+    });
     
+    const schemaName = this.getSchemaName();
     const tableName = this.getTableName(resourceName);
+    const qualifiedTableName = `${schemaName}.${tableName}`;
 
-    // Find primary key column
-    const primaryKeyColumn = this.findPrimaryKeyColumn(schema);
-    if (!primaryKeyColumn) {
-      throw new Error(`No primary key column found for table ${tableName}. Please add a required property with _id suffix.`);
+    // Find ID field using the new method
+    const idField = this.findIdField({ schema, customIdColumn });
+    
+    // Filter out records with null/undefined ID values
+    const validRecords = this.filterValidRecords({ 
+      records, 
+      idField, 
+      resourceName 
+    });
+    
+    // Skip if no valid records after filtering
+    if (validRecords.length === 0) {
+      logger.info(`No valid records to process for resource ${resourceName} after filtering`);
+      return 0;
     }
+
+    // Primary key column is the same as ID field for upsert operations
+    const primaryKeyColumn = idField;
 
     // Get all column names and their types from the schema
     const propertyNames = Object.keys(schema.properties || {});
@@ -451,7 +562,7 @@ export class DataWriter {
     const allValues: any[] = [];
     const valueSets: string[] = [];
     
-    records.forEach((item, recordIndex) => {
+    validRecords.forEach((item, recordIndex) => {
       const values = columns.map(col => {
         // Find the original property name for this column
         const originalPropertyName = propertyNames.find(prop => this.mapPropertyToColumnName(prop) === col);
@@ -510,7 +621,7 @@ export class DataWriter {
     
     // Create the bulk upsert query
     const bulkUpsertQuery = `
-      INSERT INTO ${tableName} (${quotedColumns.join(", ")})
+      INSERT INTO ${qualifiedTableName} (${quotedColumns.join(", ")})
       VALUES ${valueSets.join(", ")}
       ON CONFLICT ("${mappedPrimaryKeyColumn}")
       DO UPDATE SET ${updateClause}
@@ -521,9 +632,9 @@ export class DataWriter {
 
     // Update table status after writing records
     await this.updateTableStatus({ resourceName });
-    logger.info(`Synced ${records.length} records to ${tableName}`);
+    logger.info(`Synced ${validRecords.length} records to ${qualifiedTableName}`);
     
     // Return the count of records processed (upserted)
-    return records.length;
+    return validRecords.length;
   }
 }

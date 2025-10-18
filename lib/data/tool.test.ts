@@ -12,13 +12,41 @@ import {
 
 
 // Mock connector config for testing
+const mockOpenApiSpec = { 
+  openapi: "3.0.0", 
+  info: { title: "Test", version: "1.0" }, 
+  paths: {},
+  components: {
+    schemas: {
+      TestResource: {
+        type: "object",
+        properties: {
+          id: { type: "string" }
+        }
+      }
+    }
+  }
+};
+
 const mockConnectorConfig: DataConnectorConfig = {
   id: "test_connector",
   name: "Test Connector",
   description: "Test connector for unit testing",
-  openApiSpec: { openapi: "3.0.0", info: { title: "Test", version: "1.0" }, paths: {} },
-  resourceNames: ["TestResource"],
-  dataLoaderFactory: () => ({} as any)
+  resources: [{ name: "TestResource" }],
+  dataLoaderFactory: () => ({
+    openApiSpec: mockOpenApiSpec,
+    authenticate: () => ({ authUrl: "", success: false }),
+    continueToAuthenticate: async () => {},
+    getAccessToken: () => null,
+    setAccessToken: () => {},
+    getAvailableResourceNames: async () => ["TestResource"],
+    fetch: async function* () { 
+      // Empty generator - need at least one yield for TypeScript
+      // eslint-disable-next-line no-constant-condition
+      if (false) yield { resourceName: "TestResource" };
+      return { hasMore: false }; 
+    }
+  } as any)
 };
 
 describe("DataConnectorTool", () => {
@@ -61,7 +89,8 @@ describe("DataConnectorTool", () => {
           description: "Test connector for unit testing",
           isConnected: false,
           isLoading: false,
-          lastLoadedAt: null,
+          isRemovable: false,
+          lastSyncedAt: null,
           dataJobId: null,
           lastDataJob: null
         }]

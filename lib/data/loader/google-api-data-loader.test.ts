@@ -5,6 +5,36 @@ import { GoogleAPIDataLoader } from "@/lib/data/loader/google-api-data-loader";
 
 describe("GoogleAPIDataLoader", () => {
   let loader: GoogleAPIDataLoader;
+  let loaderWithSpec: GoogleAPIDataLoader;
+
+  const mockOpenApiSpec = {
+    openapi: "3.0.0",
+    info: { title: "Test API", version: "1.0" },
+    paths: {},
+    components: {
+      schemas: {
+        Event: {
+          type: "object",
+          properties: {
+            id: { type: "string" },
+            title: { type: "string" },
+            createdAt: { type: "string", format: "date-time" },
+            updatedAt: { type: "string", format: "date-time" },
+            description: { type: "string" }
+          },
+          required: ["id", "title"]
+        },
+        Calendar: {
+          type: "object",
+          properties: {
+            id: { type: "string" },
+            name: { type: "string" },
+            timezone: { type: "string" }
+          }
+        }
+      }
+    }
+  };
 
   beforeEach(() => {
     // Set up environment variables for tests
@@ -16,6 +46,15 @@ describe("GoogleAPIDataLoader", () => {
       onFetch: async function* () {
         yield { resourceName: "TestEvent", id: "1", title: "Test Event 1" };
         yield { resourceName: "TestEvent", id: "2", title: "Test Event 2" };
+        return { hasMore: false };
+      },
+    });
+
+    loaderWithSpec = new GoogleAPIDataLoader({
+      openApiSpec: mockOpenApiSpec,
+      scopes: ["https://www.googleapis.com/auth/calendar.readonly"],
+      onFetch: async function* () {
+        yield { resourceName: "Event", id: "1", title: "Test Event" };
         return { hasMore: false };
       },
     });
@@ -63,6 +102,7 @@ describe("GoogleAPIDataLoader", () => {
     loader.setAccessToken("test-access-token");
 
     const recordGenerator = loader.fetch({ 
+      resources: [{ name: "TestEvent" }],
       syncContext: {}, 
       maxDurationToRunMs: undefined 
     });
@@ -88,8 +128,110 @@ describe("GoogleAPIDataLoader", () => {
 
   it("should throw error when no access token is available", async () => {
     await expect(async () => {
-      const generator = loader.fetch({ syncContext: {}, maxDurationToRunMs: undefined });
+      const generator = loader.fetch({ 
+        resources: [{ name: "TestEvent" }],
+        syncContext: {}, 
+        maxDurationToRunMs: undefined 
+      });
       await generator.next();
     }).rejects.toThrow("No access token available. Please authenticate first.");
+  });
+
+  describe("getAvailableResourceNames", () => {
+    it("should throw error when no OpenAPI spec is available", async () => {
+      await expect(loader.getAvailableResourceNames()).rejects.toThrow("No OpenAPI spec available. Cannot enumerate resources.");
+    });
+
+    it("should return schema names from OpenAPI spec", async () => {
+      const resourceNames = await loaderWithSpec.getAvailableResourceNames();
+      
+      expect(resourceNames).toContain("Event");
+      expect(resourceNames).toContain("Calendar");
+      expect(resourceNames).toHaveLength(2);
+    });
+
+    it("should return empty array when no schemas exist", async () => {
+      const emptySpecLoader = new GoogleAPIDataLoader({
+        openApiSpec: {
+          openapi: "3.0.0",
+          info: { title: "Empty API", version: "1.0" },
+          paths: {},
+          components: {}
+        },
+        scopes: ["test"],
+        // eslint-disable-next-line require-yield
+        onFetch: async function* () {
+          return { hasMore: false };
+        }
+      });
+
+      const resourceNames = await emptySpecLoader.getAvailableResourceNames();
+      expect(resourceNames).toEqual([]);
+    });
+  });
+
+  describe("getResourceInfo", () => {
+    it("should throw error when no OpenAPI spec is available", async () => {
+      await expect(loader.getResourceInfo("Event")).rejects.toThrow("No OpenAPI spec available. Cannot get resource information.");
+    });
+
+    it("should return resource info from OpenAPI spec", async () => {
+      const resourceInfo = await loaderWithSpec.getResourceInfo("Event");
+      
+      expect(resourceInfo.name).toBe("Event");
+      expect(resourceInfo.columns).toEqual(["id", "title", "createdAt", "updatedAt", "description"]);
+      expect(resourceInfo.timestampColumns).toEqual(["createdAt", "updatedAt"]);
+      expect(resourceInfo.schema.type).toBe("object");
+      expect(resourceInfo.schema.properties).toHaveProperty("id");
+      expect(resourceInfo.schema.properties).toHaveProperty("title");
+      expect(resourceInfo.recordCount).toBeUndefined();
+    });
+
+    it("should throw error when schema not found", async () => {
+      await expect(loaderWithSpec.getResourceInfo("NonExistent")).rejects.toThrow("Schema NonExistent not found in OpenAPI spec");
+    });
+
+    it("should handle schemas with allOf", async () => {
+      const loaderWithAllOf = new GoogleAPIDataLoader({
+        openApiSpec: {
+          openapi: "3.0.0",
+          info: { title: "Test API", version: "1.0" },
+          paths: {},
+          components: {
+            schemas: {
+              Base: {
+                type: "object",
+                properties: {
+                  id: { type: "string" }
+                }
+              },
+              Extended: {
+                allOf: [
+                  { $ref: "#/components/schemas/Base" },
+                  {
+                    type: "object",
+                    properties: {
+                      name: { type: "string" },
+                      timestamp: { type: "string", format: "date-time" }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        scopes: ["test"],
+        // eslint-disable-next-line require-yield
+        onFetch: async function* () {
+          return { hasMore: false };
+        }
+      });
+
+      const resourceInfo = await loaderWithAllOf.getResourceInfo("Extended");
+      
+      expect(resourceInfo.columns).toContain("name");
+      expect(resourceInfo.columns).toContain("timestamp");
+      expect(resourceInfo.timestampColumns).toContain("timestamp");
+    });
   });
 });

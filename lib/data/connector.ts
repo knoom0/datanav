@@ -1,3 +1,5 @@
+import "server-only";
+
 import SwaggerParser from "@apidevtools/swagger-parser";
 import { OpenAPIV3 } from "openapi-types";
 import { DataSource } from "typeorm";
@@ -6,23 +8,44 @@ import { DataConnectorStatusEntity } from "@/lib/data/entities";
 import { DataLoader } from "@/lib/data/loader";
 import { DataWriter } from "@/lib/data/writer";
 import logger from "@/lib/logger";
+import type { DataConnectorConfig } from "@/lib/types";
 import { mergeAllOfSchemas, createZodSchema } from "@/lib/util/openapi-utils";
+
+// Re-export for backward compatibility
+export type { DataConnectorConfig, ResourceConfig } from "@/lib/types";
 
 const BATCH_SIZE = 100; // Process records in batches for efficiency
 
-export interface DataConnectorConfig {
-  id: string;
-  name: string;
-  description: string;
-  openApiSpec: string | object;
-  resourceNames: string[];
-  dataLoaderFactory: () => DataLoader;
+/**
+ * Validates a DataConnectorConfig object
+ * @param config - The config to validate
+ * @returns An error message if validation fails, null if valid
+ * Note: ID is optional in this validation since it can be auto-generated
+ */
+export function validateDataConnectorConfig(config: Partial<DataConnectorConfig>): string | null {
+  if (!config.name) {
+    return "Missing required field: name";
+  }
+  if (!config.description) {
+    return "Missing required field: description";
+  }
+  if (!config.resources || !Array.isArray(config.resources) || config.resources.length === 0) {
+    return "Missing or invalid required field: resources (must be a non-empty array)";
+  }
+  // Validate each resource has a name
+  for (let i = 0; i < config.resources.length; i++) {
+    if (!config.resources[i].name) {
+      return `Invalid resource at index ${i}: missing required field 'name'`;
+    }
+  }
+  return null;
 }
 
 interface ConnectResult {
   success: boolean;
   authInfo?: {
     authUrl: string;
+    success?: boolean;
   };
 }
 
@@ -40,18 +63,18 @@ export class DataConnector {
   private config: DataConnectorConfig;
   private dataLoader: DataLoader;
   private dataSource: DataSource;
-  private resourceSchemas: Record<string, OpenAPIV3.SchemaObject>;
   readonly dataWriter: DataWriter;
 
   protected constructor(params: { 
     config: DataConnectorConfig; 
     dataSource: DataSource; 
-    schemas: Record<string, OpenAPIV3.SchemaObject>; 
   }) {
     this.config = params.config;
     this.dataSource = params.dataSource;
+    if (!params.config.dataLoaderFactory) {
+      throw new Error("Data loader factory is required for DataConnector");
+    }
     this.dataLoader = params.config.dataLoaderFactory();
-    this.resourceSchemas = params.schemas;
     this.dataWriter = new DataWriter({ 
       dataSource: params.dataSource, 
       connectorId: this.id 
@@ -59,45 +82,15 @@ export class DataConnector {
   }
 
   /**
-   * Creates a new DataConnector instance with initialized dataLoader and resourceSchemas
+   * Creates a new DataConnector instance
    */
   static async create(config: DataConnectorConfig, dataSource: DataSource): Promise<DataConnector> {
-    // Load and validate schemas from the OpenAPI specification
-    const schemas: Record<string, OpenAPIV3.SchemaObject> = {};
-    
-    // Validate the OpenAPI spec first (with circular reference handling)
-    let api: OpenAPIV3.Document;
-    try {
-      api = await SwaggerParser.validate(config.openApiSpec as any) as OpenAPIV3.Document;
-    } catch (error) {
-      // If validation fails due to circular references, parse without validation
-      if (error instanceof Error && error.message.includes("Maximum call stack size exceeded")) {
-        logger.warn("OpenAPI spec validation failed due to circular references, parsing without validation");
-        api = await SwaggerParser.parse(config.openApiSpec as any) as OpenAPIV3.Document;
-      } else {
-        throw error;
-      }
-    }
-    
-    for (const schemaName of config.resourceNames) {
-      const schema = api.components?.schemas?.[schemaName] as OpenAPIV3.SchemaObject;
-      if (!schema) {
-        throw new Error(`Schema ${schemaName} not found in OpenAPI spec`);
-      }
-      
-      // Merge allOf schemas and cache the result
-      const mergedSchema = mergeAllOfSchemas(schema);
-      schemas[schemaName] = mergedSchema;
-    }
-    
-    logger.info(`Loaded and cached schemas: ${config.resourceNames.join(", ")}`);
-    
-    const instance = new (this as any)({ config, dataSource, schemas });
+    const instance = new (this as any)({ config, dataSource });
     return instance;
   }
 
   get id(): string {
-    return this.config.id;
+    return this.config.id!;
   }
 
   get name(): string {
@@ -135,18 +128,18 @@ export class DataConnector {
   }
 
   /**
-   * Updates the lastLoadedAt timestamp for this data connector
+   * Updates the lastSyncedAt timestamp for this data connector
    */
-  private async updateLastLoadedAt(timestamp: Date): Promise<void> {
+  private async updateLastSyncedAt(timestamp: Date): Promise<void> {
     await this.dataSource.getRepository(DataConnectorStatusEntity).upsert(
       {
         connectorId: this.id,
-        lastLoadedAt: timestamp,
+        lastSyncedAt: timestamp,
         updatedAt: new Date()
       },
       ["connectorId"]
     );
-    logger.info(`Updated lastLoadedAt for connector ${this.id} to ${timestamp.toISOString()}`);
+    logger.info(`Updated lastSyncedAt for connector ${this.id} to ${timestamp.toISOString()}`);
   }
 
   /**
@@ -198,35 +191,47 @@ export class DataConnector {
   }
 
   /**
-   * Gets merged schemas from the OpenAPI specification
+   * Gets the schema for a specific resource by loading it from the data loader
    */
-  protected get recordSchemas(): Record<string, OpenAPIV3.SchemaObject> {
-    return this.resourceSchemas;
-  }
-
-  /**
-   * Ensures schema has an id field and returns the processed schema
-   * The id field is optional and records with null id will be filtered out
-   */
-  private ensureIdField(schema: OpenAPIV3.SchemaObject): OpenAPIV3.SchemaObject {
-    const hasIdProperty = schema.properties?.id;
-    
-    // If id property already exists, return as-is (keeping existing required/optional status)
-    if (hasIdProperty) {
-      return schema;
+  private async getResourceSchema(resourceName: string): Promise<OpenAPIV3.SchemaObject> {
+    // Get openApiSpec from loader if available
+    let openApiSpec: string | object | undefined;
+    if ("openApiSpec" in this.dataLoader && this.dataLoader.openApiSpec) {
+      openApiSpec = this.dataLoader.openApiSpec as string | object;
     }
     
-    // Add id property as optional (not in required array)
-    return {
-      ...schema,
-      properties: {
-        id: { type: "string", description: "Unique identifier" },
-        ...schema.properties
-      },
-      // Don't add id to required fields - it's optional
-      required: schema.required || []
-    };
+    // Load schema from openApiSpec if available
+    if (openApiSpec) {
+      // Validate the OpenAPI spec first (with circular reference handling)
+      let api: OpenAPIV3.Document;
+      try {
+        api = await SwaggerParser.validate(openApiSpec as any) as OpenAPIV3.Document;
+      } catch (error) {
+        // If validation fails due to circular references, parse without validation
+        if (error instanceof Error && error.message.includes("Maximum call stack size exceeded")) {
+          logger.warn("OpenAPI spec validation failed due to circular references, parsing without validation");
+          api = await SwaggerParser.parse(openApiSpec as any) as OpenAPIV3.Document;
+        } else {
+          throw error;
+        }
+      }
+      
+      const schema = api.components?.schemas?.[resourceName] as OpenAPIV3.SchemaObject;
+      if (!schema) {
+        throw new Error(`Schema ${resourceName} not found in OpenAPI spec`);
+      }
+      
+      // Merge allOf schemas and return the result
+      return mergeAllOfSchemas(schema);
+    } else if (this.dataLoader.getResourceInfo) {
+      // If no openApiSpec but we have getResourceInfo, get schema from the loader
+      const resourceInfo = await this.dataLoader.getResourceInfo(resourceName);
+      return resourceInfo.schema;
+    } else {
+      throw new Error(`Cannot get schema for resource ${resourceName}: no openApiSpec and data loader does not support getResourceInfo`);
+    }
   }
+
 
 
   /**
@@ -235,15 +240,35 @@ export class DataConnector {
   private async prepareTables(): Promise<void> {
     logger.info(`Preparing data tables for ${this.config.name}`);
 
-    for (const resourceName of this.config.resourceNames) {
-      const schema = this.recordSchemas[resourceName];
-      if (!schema) {
-        throw new Error(`Schema not found for ${resourceName}`);
-      }
+    for (const resource of this.config.resources) {
+      const resourceName = resource.name;
+      const schema = await this.getResourceSchema(resourceName);
 
-      await this.dataWriter.syncTableSchema(resourceName, this.ensureIdField(schema));
+      await this.dataWriter.syncTableSchema({
+        resourceConfig: resource,
+        schema
+      });
       logger.info(`Prepared table for resource: ${resourceName}`);
     }
+  }
+
+  /**
+   * Normalize record values to match OpenAPI schema expectations
+   * Converts Date objects to ISO strings for date/datetime fields
+   */
+  private normalizeRecord(record: Record<string, any>): Record<string, any> {
+    const normalized: Record<string, any> = {};
+    
+    for (const [key, value] of Object.entries(record)) {
+      if (value instanceof Date) {
+        // Convert Date objects to ISO strings for OpenAPI schema compatibility
+        normalized[key] = value.toISOString();
+      } else {
+        normalized[key] = value;
+      }
+    }
+    
+    return normalized;
   }
 
   /**
@@ -253,44 +278,37 @@ export class DataConnector {
     let totalUpdatedRecords = 0;
     
     for (const [resourceName, resourceRecords] of Object.entries(recordsBySchema)) {
-      const schema = this.recordSchemas[resourceName];
-      if (!schema) {
-        logger.warn(`Schema not found for ${resourceName}, skipping records`);
+      // Find the corresponding resource config
+      const resourceConfig = this.config.resources.find(r => r.name === resourceName);
+      if (!resourceConfig) {
+        logger.warn(`Resource config not found for ${resourceName}, skipping records`);
         continue;
       }
 
-      const processedSchema = this.ensureIdField(schema);
-      
-      // Filter out records with null or undefined id and log warnings
-      const validRecords = [];
-      let nullIdCount = 0;
-      
-      for (const record of resourceRecords) {
-        if (record.id === null || record.id === undefined) {
-          nullIdCount++;
-          continue;
-        }
-        validRecords.push(record);
-      }
-      
-      if (nullIdCount > 0) {
-        logger.warn(`Filtered out ${nullIdCount} record(s) with null/undefined id for resource ${resourceName}`);
-      }
-      
-      // Skip if no valid records after filtering
-      if (validRecords.length === 0) {
-        logger.info(`No valid records to process for resource ${resourceName} after filtering`);
+      // Get schema for this resource
+      let schema: OpenAPIV3.SchemaObject;
+      try {
+        schema = await this.getResourceSchema(resourceName);
+      } catch (error) {
+        logger.warn(`Schema not found for ${resourceName}, skipping records: ${error}`);
         continue;
       }
       
-      // Validate valid records against schema
-      const zodSchema = createZodSchema(processedSchema);
-      validRecords.forEach(record => zodSchema.parse(record));
+      // Normalize records (convert Date objects to ISO strings)
+      const normalizedRecords = resourceRecords.map(record => this.normalizeRecord(record));
       
-      const updatedCount = await this.dataWriter.syncTableRecords(resourceName, processedSchema, validRecords);
+      // Validate normalized records against schema
+      const zodSchema = createZodSchema(schema);
+      normalizedRecords.forEach(record => zodSchema.parse(record));
+      
+      const updatedCount = await this.dataWriter.syncTableRecords({
+        resourceConfig,
+        schema,
+        records: normalizedRecords
+      });
       totalUpdatedRecords += updatedCount;
     }
-    
+
     return totalUpdatedRecords;
   }
 
@@ -304,9 +322,20 @@ export class DataConnector {
     // Set isConnected = false to handle reconnect cases
     await this.updateConnectionStatus(false);
     
+    // Attempt authentication (may be immediate for no-auth loaders like SQL)
+    const authResult = this.dataLoader.authenticate({ redirectTo: params.redirectTo });
+    
+    // Check if authentication succeeded immediately (no-auth loaders)
+    if (authResult.success) {
+      await this.updateConnectionStatus(true);
+      logger.info(`No-auth data loader connected successfully for connector ${this.id}`);
+      return { success: true };
+    }
+    
+    // OAuth flow required
     return {
       success: false,
-      authInfo: this.dataLoader.authenticate({ redirectTo: params.redirectTo })
+      authInfo: authResult
     };
   }
 
@@ -324,7 +353,7 @@ export class DataConnector {
     return { success: true };
   }
 
-  async load(params: { 
+  async load(params: {
     maxDurationToRunMs?: number;
     onProgressUpdate?: (params: { updatedRecordCount: number }) => void | Promise<void>;
   } = {}): Promise<DataLoadResult> {
@@ -343,6 +372,9 @@ export class DataConnector {
       this.dataLoader.setRefreshToken(status.refreshToken);
     }
     
+    // Record the sync start time - this will be used for the next sync
+    const syncStartTime = new Date();
+    
     // Initialize syncContext object for the loader to modify
     const syncContext = status?.syncContext ?? {};
     
@@ -351,7 +383,8 @@ export class DataConnector {
     let isFinished = true; // Assume finished unless there are more pages or error occurs
     
     const recordGenerator = this.dataLoader.fetch({ 
-      lastLoadedAt: status?.lastLoadedAt ?? undefined,
+      resources: this.config.resources,
+      lastSyncedAt: status?.lastSyncedAt ?? undefined,
       syncContext: syncContext,
       maxDurationToRunMs
     });
@@ -398,10 +431,11 @@ export class DataConnector {
       }
     }
     
-    const now = new Date();
-    
-    // Update both timestamp and sync context (syncContext was modified by the loader)
-    await this.updateLastLoadedAt(now);
+    // Only update lastSyncedAt if the load finished successfully
+    // Use the start time (not end time) to ensure we capture all records updated during the sync
+    if (isFinished) {
+      await this.updateLastSyncedAt(syncStartTime);
+    }
     await this.updateSyncContext(syncContext);
     
     return { updatedRecordCount: totalUpdatedRecords, isFinished };
@@ -416,10 +450,12 @@ export class DataConnector {
     const schemaName = this.getSchemaName();
     
     // Clear all data tables for this connector
-    for (const resourceName of this.config.resourceNames) {
+    for (const resource of this.config.resources) {
+      const resourceName = resource.name;
       const tableName = this.getTableName(resourceName);
       try {
-        await this.dataSource.query(`DROP TABLE IF EXISTS ${tableName} CASCADE`);
+        // Quote the table name for safety
+        await this.dataSource.query(`DROP TABLE IF EXISTS "${schemaName}"."${resourceName.toLowerCase()}" CASCADE`);
         logger.info(`Dropped table: ${tableName}`);
       } catch (error) {
         logger.warn(`Failed to drop table ${tableName}: ${String(error)}`);
@@ -428,7 +464,8 @@ export class DataConnector {
     
     // Drop the schema if it exists
     try {
-      await this.dataSource.query(`DROP SCHEMA IF EXISTS ${schemaName} CASCADE`);
+      // Quote the schema name for safety
+      await this.dataSource.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
       logger.info(`Dropped schema: ${schemaName}`);
     } catch (error) {
       logger.warn(`Failed to drop schema ${schemaName}: ${String(error)}`);
@@ -453,7 +490,7 @@ export class DataConnector {
   async updateStatus(updates: Partial<{
     isConnected: boolean;
     isLoading: boolean;
-    lastLoadedAt: Date | null;
+    lastSyncedAt: Date | null;
     dataJobId: string | null;
     lastDataJobId: string | null;
   }>): Promise<void> {
@@ -476,7 +513,7 @@ export class DataConnector {
    * Gets the schema name from the connector ID
    */
   private getSchemaName(): string {
-    return this.id.replace(/\./g, "_"); // Replace dots for valid SQL identifiers
+    return this.id.replace(/[.-]/g, "_"); // Replace dots and dashes for valid SQL identifiers
   }
 
   /**

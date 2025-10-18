@@ -1,7 +1,7 @@
 "use client";
 
-import { Button, Paper, Text, Group, Stack, Badge, Loader, Alert, Menu, Modal } from "@mantine/core";
-import { IconPlug, IconPlugConnected, IconAlertCircle, IconClock, IconRefresh, IconDots, IconTrash, IconCheck, IconX } from "@tabler/icons-react";
+import { Button, Paper, Text, Group, Stack, Badge, Loader, Alert, Menu, Modal, ActionIcon, Code } from "@mantine/core";
+import { IconPlug, IconPlugConnected, IconAlertCircle, IconClock, IconRefresh, IconDots, IconTrash, IconCheck, IconX, IconInfoCircle } from "@tabler/icons-react";
 import { useState, useEffect } from "react";
 
 import { DataConnectorInfo, DataJobInfo } from "@/lib/types";
@@ -22,16 +22,20 @@ interface DataConnectButtonProps {
   connectorId: string;
   onConnectStart?: () => void;
   onConnectComplete?: (result: any) => void;
+  onDelete?: () => void;
 }
 
 export function DataConnectButton({ 
   connectorId,
   onConnectStart,
-  onConnectComplete
+  onConnectComplete,
+  onDelete
 }: DataConnectButtonProps) {
   const [connector, setConnector] = useState<DataConnectorInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [disconnectModalOpen, setDisconnectModalOpen] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [errorDetailsModalOpen, setErrorDetailsModalOpen] = useState(false);
   const [jobInfo, setJobInfo] = useState<DataJobInfo | null>(null);
   
   // Single loading state for all button actions
@@ -157,7 +161,7 @@ export function DataConnectButton({
         return;
       }
 
-      // Refresh connector info to get updated lastLoadedAt and isLoading state
+      // Refresh connector info to get updated lastSyncedAt and isLoading state
       const refreshResponse = await fetch(`/api/data/${connectorId}`);
       if (refreshResponse.ok) {
         const refreshedData = await refreshResponse.json();
@@ -197,6 +201,36 @@ export function DataConnectButton({
         const refreshedData = await refreshResponse.json();
         setConnector(refreshedData);
       }
+    } finally {
+      setIsHandlingAction(false);
+    }
+  };
+
+  // Handle delete button click
+  const handleDelete = async () => {
+    if (!connector || isHandlingAction || !connector.isRemovable) return;
+
+    setIsHandlingAction(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/data/${connectorId}/delete`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        setError(`Delete failed: ${errorText}`);
+        return;
+      }
+
+      setDeleteModalOpen(false);
+
+      // Call onDelete callback to refresh the connector list
+      onDelete?.();
     } finally {
       setIsHandlingAction(false);
     }
@@ -345,6 +379,17 @@ export function DataConnectButton({
           <Text size="xs" c={isSuccess ? "green" : isError ? "red" : "yellow"} fw={500}>
             Last load {isSuccess ? "successful" : isError ? "failed" : "canceled"}
           </Text>
+          {isError && lastDataJob.error && (
+            <ActionIcon
+              size="xs"
+              variant="subtle"
+              color="red"
+              onClick={() => setErrorDetailsModalOpen(true)}
+              aria-label="View error details"
+            >
+              <IconInfoCircle size="0.9rem" />
+            </ActionIcon>
+          )}
         </Group>
         <Group gap="xs" align="center">
           <IconClock size="0.9rem" style={{ color: "var(--mantine-color-dimmed)" }} />
@@ -454,6 +499,16 @@ export function DataConnectButton({
                 >
                   Disconnect
                 </Menu.Item>
+                {connector.isRemovable && (
+                  <Menu.Item
+                    leftSection={<IconTrash size="0.9rem" />}
+                    color="red"
+                    onClick={() => setDeleteModalOpen(true)}
+                    disabled={connector.isLoading || isHandlingAction}
+                  >
+                    Delete Connector
+                  </Menu.Item>
+                )}
               </Menu.Dropdown>
             </Menu>
           </Group>
@@ -582,6 +637,80 @@ export function DataConnectButton({
               leftSection={<IconTrash size="1rem" />}
             >
               Disconnect & Clear Data
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      <Modal
+        opened={deleteModalOpen}
+        onClose={() => setDeleteModalOpen(false)}
+        title="Delete Data Connector"
+        centered
+      >
+        <Stack gap="md">
+          <Text>
+            Are you sure you want to permanently delete <strong>{connector.name}</strong>?
+          </Text>
+          
+          <Alert color="red" icon={<IconAlertCircle size="1rem" />}>
+            <Stack gap="xs">
+              <Text size="sm" fw={500}>
+                This action cannot be undone!
+              </Text>
+              <Text size="sm">
+                This will:
+              </Text>
+              <Text size="sm" component="ul" style={{ margin: 0, paddingLeft: "1.5rem" }}>
+                <li>Delete the connector configuration</li>
+                <li>Remove all loaded data</li>
+                <li>Clear all connection settings</li>
+              </Text>
+            </Stack>
+          </Alert>
+
+          <Group justify="flex-end" gap="sm">
+            <Button
+              variant="subtle"
+              onClick={() => setDeleteModalOpen(false)}
+              disabled={isHandlingAction}
+            >
+              Cancel
+            </Button>
+            <Button
+              color="red"
+              onClick={handleDelete}
+              loading={isHandlingAction}
+              disabled={isHandlingAction}
+              leftSection={<IconTrash size="1rem" />}
+            >
+              Delete Permanently
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      <Modal
+        opened={errorDetailsModalOpen}
+        onClose={() => setErrorDetailsModalOpen(false)}
+        title="Error Details"
+        centered
+        size="lg"
+      >
+        <Stack gap="md">
+          <Text size="sm">
+            The last data load job failed with the following error:
+          </Text>
+          
+          <Code block style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+            {connector?.lastDataJob?.error || "No error details available"}
+          </Code>
+
+          <Group justify="flex-end" gap="sm">
+            <Button
+              onClick={() => setErrorDetailsModalOpen(false)}
+            >
+              Close
             </Button>
           </Group>
         </Stack>

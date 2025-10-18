@@ -203,7 +203,7 @@ function normalizeResult(result: boolean | DescribeIfResult): DescribeIfResult {
 export function describeIf(
   suiteName: string,
   condition: DescribeIfCondition,
-  suiteFn: Parameters<typeof describe>[1]
+  suiteFn: () => void
 ): void {
   const { run, reason } = normalizeResult(condition());
 

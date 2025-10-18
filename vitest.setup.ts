@@ -6,6 +6,9 @@ import { beforeAll, vi } from "vitest"
 
 import logger from "@/lib/logger"
 
+// Mock server-only to allow importing server modules in tests
+vi.mock("server-only", () => ({}))
+
 // Polyfill fetch for Node.js environment
 if (typeof globalThis.fetch === "undefined") {
   const { default: fetch } = await import("node-fetch")

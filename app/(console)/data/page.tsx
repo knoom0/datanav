@@ -13,9 +13,10 @@ import {
   Alert,
   Loader
 } from "@mantine/core";
-import { IconSearch, IconRefresh, IconAlertCircle, IconDatabase } from "@tabler/icons-react";
+import { IconSearch, IconRefresh, IconAlertCircle, IconDatabase, IconPlus } from "@tabler/icons-react";
 import { useState, useEffect } from "react";
 
+import { AddDataConnectorModal } from "@/components/add-data-connector-modal";
 import { useAppTitle } from "@/components/app-title-context";
 import { DataConnectButton } from "@/components/data-connect-button";
 
@@ -28,7 +29,7 @@ interface DataConnectorInfo {
   description: string;
   isConnected: boolean;
   isLoading: boolean;
-  lastLoadedAt: Date | null;
+  lastSyncedAt: Date | null;
 }
 
 export default function DataPage() {
@@ -39,6 +40,7 @@ export default function DataPage() {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [addModalOpen, setAddModalOpen] = useState(false);
 
   // Load all connectors
   const loadConnectors = async () => {
@@ -146,7 +148,13 @@ export default function DataPage() {
   return (
     <Container size="xl" py="md">
         <Stack gap="lg">
-          <Group justify="flex-end">
+          <Group justify="space-between">
+            <Button
+              leftSection={<IconPlus size="1rem" />}
+              onClick={() => setAddModalOpen(true)}
+            >
+              Add Connector
+            </Button>
             <Text c="dimmed">
               {filteredConnectors.length} connector{filteredConnectors.length !== 1 ? "s" : ""}
               {filteredConnectors.length !== connectors.length && (
@@ -216,11 +224,24 @@ export default function DataPage() {
               <DataConnectButton
                 key={connector.id}
                 connectorId={connector.id}
+                onDelete={() => {
+                  // Reload connectors after deletion
+                  loadConnectors();
+                }}
               />
             ))}
           </SimpleGrid>
         )}
       </Stack>
+
+      <AddDataConnectorModal
+        opened={addModalOpen}
+        onClose={() => setAddModalOpen(false)}
+        onSuccess={() => {
+          // Reload connectors after successful add
+          loadConnectors();
+        }}
+      />
     </Container>
   );
 }

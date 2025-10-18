@@ -79,4 +79,58 @@ export default defineConfig([{
             }],
         }],
     },
+}, {
+    // Client component files - prevent server-only imports
+    files: [
+        "components/**/*.{ts,tsx}",
+        "app/**/*.tsx",
+    ],
+    rules: {
+        "no-restricted-imports": ["error", {
+            patterns: [{
+                group: ["../*"],
+                message: "Please use absolute imports instead of relative parent imports",
+            }, {
+                group: ["./*"],
+                message: "Please use absolute imports instead of relative sibling imports",
+            }, {
+                group: [
+                    "@/lib/data/catalog",
+                    "@/lib/data/entities",
+                    "@/lib/data/connector",
+                    "@/lib/data/writer",
+                    "@/lib/data/job",
+                    "@/lib/hosting/*",
+                    "@/lib/util/db-util",
+                    "@/lib/supabase/server",
+                ],
+                message: "Cannot import server-only modules in client components. Fetch data from API endpoints or use server-provided properties instead.",
+            }],
+        }],
+    },
+}, {
+    // API routes and server components - allow all imports
+    files: [
+        "app/api/**/*.ts",
+        "app/**/route.ts",
+        "lib/**/*.ts",
+        "middleware.ts",
+    ],
+    rules: {
+        "no-restricted-imports": ["error", {
+            patterns: [{
+                group: ["../*"],
+                message: "Please use absolute imports instead of relative parent imports",
+            }, {
+                group: ["./*"],
+                message: "Please use absolute imports instead of relative sibling imports",
+            }],
+        }],
+    },
+}, {
+    // Test files - allow all imports
+    files: ["**/*.test.ts", "**/*.test.tsx"],
+    rules: {
+        "no-restricted-imports": "off",
+    },
 }]);

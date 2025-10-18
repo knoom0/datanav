@@ -1,4 +1,23 @@
 import { UIMessage } from "ai";
+import { OpenAPIV3 } from "openapi-types";
+
+/**
+ * Detailed information about a data loader resource
+ */
+export interface DataLoaderResourceInfo {
+  /** The name of the resource */
+  name: string;
+  /** OpenAPI schema object describing the resource structure */
+  schema: OpenAPIV3.SchemaObject;
+  /** List of column/field names in the resource */
+  columns: string[];
+  /** List of columns that are potential timestamp fields for incremental sync */
+  timestampColumns: string[];
+  /** Optional primary key column name */
+  primaryKeyColumn?: string;
+  /** Optional record count (number of records in the resource) */
+  recordCount?: number;
+}
 
 /**
  * UI Bundle part type constant for message parts
@@ -78,6 +97,49 @@ export interface DataSource {
 }
 
 /**
+ * Information about a data loader class
+ */
+export interface DataLoaderInfo {
+  /** Class name of the data loader */
+  name: string;
+  /** Example configuration for this data loader */
+  exampleConfig: Record<string, any>;
+  /** Whether this loader should be hidden from the data loader list */
+  isHidden: boolean;
+}
+
+/**
+ * Configuration for a single resource within a data connector
+ */
+export interface ResourceConfig {
+  /** Resource name (e.g., table name, API endpoint) */
+  name: string;
+  /** Optional creation timestamp column name for incremental sync */
+  createdAtColumn?: string;
+  /** Optional update timestamp column name for incremental sync */
+  updatedAtColumn?: string;
+  /** Optional ID column name (defaults to auto-detection of "id", "uuid", or "guid") */
+  idColumn?: string;
+}
+
+/**
+ * Configuration for creating a data connector
+ */
+export interface DataConnectorConfig {
+  /** Unique identifier - auto-generated if not provided */
+  id?: string;
+  name: string;
+  description: string;
+  /** List of resources to sync with optional per-resource configuration */
+  resources: ResourceConfig[];
+  /** Data loader type identifier (e.g., "google-api"). Only used when dataLoaderFactory is not set. */
+  dataLoader?: string;
+  /** Configuration options for the data loader. Only used when dataLoaderFactory is not set. */
+  dataLoaderOptions?: object;
+  dataLoaderFactory?: () => any; // Will be typed properly when imported in connector.ts
+}
+
+/**
  * Information about a data connector including its configuration and current status
  */
 export interface DataConnectorInfo {
@@ -86,9 +148,11 @@ export interface DataConnectorInfo {
   description: string;
   isConnected: boolean;
   isLoading: boolean;
-  lastLoadedAt: Date | null;
+  lastSyncedAt: Date | null;
   dataJobId: string | null;
   lastDataJob: DataJobInfo | null;
+  /** Whether this connector can be deleted by the user (false for bundled connectors) */
+  isRemovable: boolean;
 }
 
 /**
@@ -107,6 +171,7 @@ export interface DataJobInfo {
     updatedRecordCount: number;
     [key: string]: any;
   } | null;
+  error: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

@@ -2,39 +2,38 @@ import { google } from "googleapis";
 
 import { DataConnectorConfig } from "@/lib/data/connector";
 import apiSpec from "@/lib/data/connector-config/google-calendar/api-spec.json";
-import { GoogleAPIDataLoader, GoogleAPIFetchParams } from "@/lib/data/loader/google-api-data-loader";
+import { GoogleAPIDataLoader, GoogleAPIFetchParams, MAX_LOOKBACK_DAYS } from "@/lib/data/loader/google-api-data-loader";
 import logger from "@/lib/logger";
 
 
 const MAX_RESULTS = 2500; // Maximum allowed by Google Calendar API
-const LOOKBACK_DAYS = 2 * 365; // 2 years in days
 
 export default {
   id: "google_calendar",
   name: "Google Calendar",
   description: "Loads Google Calendar events data.",
-  openApiSpec: apiSpec,
-  resourceNames: ["Event"],
+  resources: [{ 
+    name: "Event",
+    createdAtColumn: "created",
+    updatedAtColumn: "updated"
+  }],
   dataLoaderFactory: () => new GoogleAPIDataLoader({
+    openApiSpec: apiSpec,
     scopes: ["https://www.googleapis.com/auth/calendar.readonly"],
     onFetch: async function* ({
       auth,
-      lastLoadedTime: _lastLoadedTime,
+      lastSyncedAt,
       syncContext,
     }: GoogleAPIFetchParams) { 
       // Create Calendar API client
       const calendar = google.calendar({ version: "v3", auth });
 
-      // Use stored lastEventUpdateTime from previous fetch or start fresh
-      const lastEventUpdateTime: string | undefined = syncContext?.lastEventUpdateTime;
-      let latestEventUpdateTime: string | null = null;
-
       // Build query parameters
       const current = new Date();
-      const minDate = new Date(current.getTime() - (LOOKBACK_DAYS * 24 * 60 * 60 * 1000));
+      const minDate = new Date(current.getTime() - (MAX_LOOKBACK_DAYS * 24 * 60 * 60 * 1000));
       const queryParams: any = {
         calendarId: "primary",
-        timeMin: minDate.toISOString(),  // Fetch events from 2 years ago
+        timeMin: minDate.toISOString(),  // Fetch events from MAX_LOOKBACK_DAYS ago
         timeMax: current.toISOString(),  // Do not fetch events in the future
         maxResults: MAX_RESULTS,
         showDeleted: true,
@@ -42,9 +41,10 @@ export default {
         orderBy: "updated", // Always order by updated time for consistent results
       };
 
-      // Add updatedMin if we have a previous event update time (incremental sync)
-      if (lastEventUpdateTime) {
-        queryParams.updatedMin = lastEventUpdateTime;
+      // Add updatedMin if we have a previous sync time (incremental sync)
+      // This uses the updatedAtColumn to fetch only records updated since last sync
+      if (lastSyncedAt) {
+        queryParams.updatedMin = lastSyncedAt.toISOString();
       }
       
       // Add pageToken for pagination if available
@@ -60,14 +60,24 @@ export default {
         throw new Error("Failed to get events from calendar: No data returned");
       }
       
-      // Collect events from this page and track latest update time
+      // Track the latest event update time for sync context
+      let latestEventUpdateTime: string | undefined = syncContext?.lastEventUpdateTime;
+
+      // Collect events from this page
       for (const event of response.data.items || []) {
         yield { resourceName: "Event", ...event };
         
-        // Track the latest event update time from events
-        if (event.updated && (!latestEventUpdateTime || event.updated > latestEventUpdateTime)) {
-          latestEventUpdateTime = event.updated;
+        // Track the latest event update time
+        if (event.updated) {
+          if (!latestEventUpdateTime || event.updated > latestEventUpdateTime) {
+            latestEventUpdateTime = event.updated;
+          }
         }
+      }
+
+      // Update sync context with the latest event update time
+      if (latestEventUpdateTime && syncContext) {
+        syncContext.lastEventUpdateTime = latestEventUpdateTime;
       }
 
       // Check if we have more pages to fetch
@@ -84,12 +94,8 @@ export default {
         }
         hasMore = true;
       } else {
-        // Store the latest event update time for next fetch cycle
-        // If no events were found, use current time as the baseline
-        const eventUpdateTimeToStore = latestEventUpdateTime || new Date().toISOString();
+        // Clear nextPageToken since we're done with pagination
         if (syncContext) {
-          syncContext.lastEventUpdateTime = eventUpdateTimeToStore;
-          // Clear nextPageToken since we're done with pagination
           delete syncContext.nextPageToken;
         }
       }
