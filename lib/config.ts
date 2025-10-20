@@ -20,6 +20,9 @@ import { config as rawConfig } from "@/datanav.config";
 export interface Config {
   agent: any;
   database: any;
+  github: {
+    repo: string;
+  };
   hosting: {
     enabled: boolean;
   };

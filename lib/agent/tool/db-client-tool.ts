@@ -44,7 +44,7 @@ export class DatabaseClientTool extends BaseAgentTool {
   private enableTracking: boolean;
   private dataSpec?: any;
   private queryResults: Map<string, DataQueryResult> = new Map();
-  private queryCache: Map<string, { results: any[], rowCount: number }> = new Map();
+  private queryCache: Map<string, { results: any[], rowCount: number, note?: string }> = new Map();
 
   constructor(dbClient: DatabaseClient, options: DatabaseClientToolOptions = {}) {
     super();
@@ -76,7 +76,7 @@ export class DatabaseClientTool extends BaseAgentTool {
     return { tables: tableInfos };
   }
 
-  private async executeQuery(sql: string): Promise<{ results: any[], rowCount: number }> {
+  private async executeQuery(sql: string): Promise<{ results: any[], rowCount: number, note?: string }> {
     // Validate that the query is a SELECT query
     validateSelectQuery(sql);
     
@@ -86,10 +86,19 @@ export class DatabaseClientTool extends BaseAgentTool {
     }
     
     const results = await this.dbClient.query(sql);
+    const totalRowCount = results.length;
+    const maxRows = 50;
+    
+    // Limit results to 50 rows if there are more to save tokens
+    const limitedResults = totalRowCount > maxRows ? results.slice(0, maxRows) : results;
+    const note = totalRowCount > maxRows 
+      ? `Note: Only showing ${maxRows} of ${totalRowCount} rows to save tokens. Consider adding LIMIT clause or filtering your query to see specific data.`
+      : undefined;
     
     const queryResult = {
-      results: results,
-      rowCount: results.length
+      results: limitedResults,
+      rowCount: totalRowCount,
+      ...(note && { note })
     };
     
     // Cache the result if tracking is enabled
@@ -98,6 +107,7 @@ export class DatabaseClientTool extends BaseAgentTool {
       
       // Track the result if dataSpec is provided
       if (this.dataSpec) {
+        // Track with full results for internal use
         this.trackQueryResult(sql, results);
       }
     }
