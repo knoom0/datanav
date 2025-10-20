@@ -2,8 +2,9 @@
  * @vitest-environment jsdom
  */
 import { MantineProvider } from "@mantine/core";
-import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
 import { ErrorDisplay } from "./error-display";
 
 // Wrapper component for Mantine provider
