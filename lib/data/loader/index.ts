@@ -4,11 +4,6 @@ import { SQLDataLoader } from "@/lib/data/loader/sql-data-loader";
 import { DataLoaderInfo } from "@/lib/types";
 
 /**
- * Registry of available data loader classes
- */
-const DATA_LOADER_REGISTRY = [GoogleAPIDataLoader, SQLDataLoader] as const;
-
-/**
  * Type for data loader class with static properties
  */
 type DataLoaderClass = (new (config: DataLoaderConfig) => DataLoader) & {
@@ -18,23 +13,25 @@ type DataLoaderClass = (new (config: DataLoaderConfig) => DataLoader) & {
 
 /**
  * Map of loader class names to their constructor classes
+ * Names are stored explicitly to avoid class name mangling during build
  */
-const loaderClassMap = new Map<string, DataLoaderClass>(
-  DATA_LOADER_REGISTRY.map(LoaderClass => [LoaderClass.name, LoaderClass])
-);
+const LOADER_CLASS_MAP = new Map<string, DataLoaderClass>([
+  ["GoogleAPIDataLoader", GoogleAPIDataLoader],
+  ["SQLDataLoader", SQLDataLoader]
+]);
 
 /**
  * Gets the list of available data loader class names
  */
 export function getAvailableDataLoaders(): string[] {
-  return Array.from(loaderClassMap.keys());
+  return Array.from(LOADER_CLASS_MAP.keys());
 }
 
 /**
  * Gets information about all available data loaders including their example configs
  */
 export function getAvailableDataLoaderInfos(): DataLoaderInfo[] {
-  return Array.from(loaderClassMap.entries()).map(([name, LoaderClass]) => ({
+  return Array.from(LOADER_CLASS_MAP.entries()).map(([name, LoaderClass]) => ({
     name,
     exampleConfig: LoaderClass.exampleConfig || {},
     isHidden: LoaderClass.isHidden ?? false
@@ -52,10 +49,10 @@ export function createDataLoader(params: {
 }): DataLoader {
   const { loaderClassName, loaderConfig } = params;
 
-  const LoaderClass = loaderClassMap.get(loaderClassName);
+  const LoaderClass = LOADER_CLASS_MAP.get(loaderClassName);
   
   if (!LoaderClass) {
-    const availableLoaders = Array.from(loaderClassMap.keys()).join(", ");
+    const availableLoaders = Array.from(LOADER_CLASS_MAP.keys()).join(", ");
     throw new Error(`Unknown data loader class name: ${loaderClassName}. Available loaders: ${availableLoaders}`);
   }
 

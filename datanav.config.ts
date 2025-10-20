@@ -42,6 +42,10 @@ export const config = {
     }
   },
 
+  github: {
+    repo: "knoom0/datanav",
+  },
+
   hosting: {
     enabled: false,
   },

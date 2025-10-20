@@ -1,11 +1,12 @@
 "use client";
 
-import { Paper, Box, Stack, Group, Container, ScrollArea, Text, Code, Image, Alert, Modal, Button } from "@mantine/core";
-import { IconAlertCircle, IconExternalLink, IconClock } from "@tabler/icons-react";
+import { Paper, Box, Stack, Group, Container, ScrollArea, Text, Code, Image } from "@mantine/core";
+import { IconClock } from "@tabler/icons-react";
 import { useRef, useEffect, useState, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 
 import { DataConnectButton } from "@/components/data-connect-button";
+import { ErrorDisplay } from "@/components/error-display";
 import { TypedUIMessage } from "@/lib/types";
 
 // Constants to avoid hardcoded strings - these must match DataConnectorTool schema values
@@ -166,7 +167,6 @@ export function ChatView({ messages, error }: ChatViewProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const [expandedParts, setExpandedParts] = useState<Set<string>>(new Set());
-  const [isErrorModalOpen, setIsErrorModalOpen] = useState(false);
   const [isUserInteracting, setIsUserInteracting] = useState(false);
   const [isAtBottom, setIsAtBottom] = useState(true);
 
@@ -318,56 +318,15 @@ export function ChatView({ messages, error }: ChatViewProps) {
               </Box>
             ))}
             {error && (
-              <Alert
-                icon={<IconAlertCircle size={16} />}
-                title="Error"
-                color="red"
-                variant="light"
-                style={{ maxWidth: "100%", wordBreak: "break-word" }}
-              >
-                <Text 
-                  size="sm" 
-                  style={{ 
-                    display: "-webkit-box",
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: "vertical",
-                    overflow: "hidden",
-                    whiteSpace: "pre-wrap",
-                    wordBreak: "break-word"
-                  }}
-                >
-                  {error.message || "An error occurred while processing your request."}
-                </Text>
-                <Button
-                  variant="subtle"
-                  size="xs"
-                  color="red"
-                  leftSection={<IconExternalLink size={14} />}
-                  onClick={() => setIsErrorModalOpen(true)}
-                >
-                  View Full Error
-                </Button>
-              </Alert>
+              <ErrorDisplay 
+                error={error} 
+                context="Error occurred during chat interaction"
+              />
             )}
             <Box ref={messagesEndRef} />
           </Stack>
         </ScrollArea>
       </Stack>
-      
-      {/* Error Details Modal */}
-      <Modal
-        opened={isErrorModalOpen}
-        onClose={() => setIsErrorModalOpen(false)}
-        title="Error Details"
-        size="lg"
-        centered
-      >
-        <Box style={{ whiteSpace: "pre-wrap", fontFamily: "monospace" }}>
-          <Text size="sm">
-            {error?.message || "An error occurred while processing your request."}
-          </Text>
-        </Box>
-      </Modal>
     </Container>
   );
 }

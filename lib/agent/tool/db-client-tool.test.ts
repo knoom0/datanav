@@ -87,4 +87,41 @@ describe("DatabaseClientTool", () => {
     expect(lastCall?.params).toEqual({ operation: "list_tables" });
     expect(lastCall?.result).toHaveProperty("tables");
   });
+
+  it("should limit results to 50 rows and include note when more rows exist", async () => {
+    // First, insert 60 test records
+    for (let i = 0; i < 60; i++) {
+      await client.query(`INSERT INTO users (name, email) VALUES ("User${i}", "user${i}@test.com")`);
+    }
+
+    // Query all users (should return more than 50 rows)
+    const result = await tool.execute({
+      operation: "query",
+      sql: "SELECT * FROM users"
+    });
+    const parsed = JSON.parse(result);
+    
+    // Should only return 50 results even though there are more
+    expect(parsed.results).toHaveLength(50);
+    
+    // Should include the full row count
+    expect(parsed.rowCount).toBeGreaterThanOrEqual(60);
+    
+    // Should include a note about partial results
+    expect(parsed.note).toBeDefined();
+    expect(parsed.note).toContain("Only showing 50");
+    expect(parsed.note).toContain("rows to save tokens");
+  });
+
+  it("should not include note when results are 50 or fewer rows", async () => {
+    const result = await tool.execute({
+      operation: "query",
+      sql: "SELECT * FROM users LIMIT 10"
+    });
+    const parsed = JSON.parse(result);
+    
+    expect(parsed.results.length).toBeLessThanOrEqual(50);
+    expect(parsed.rowCount).toBe(parsed.results.length);
+    expect(parsed.note).toBeUndefined();
+  });
 });
