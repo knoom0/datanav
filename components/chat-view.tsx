@@ -2,6 +2,7 @@
 
 import { Paper, Box, Stack, Group, Container, ScrollArea, Text, Code, Image, Alert, Modal, Button } from "@mantine/core";
 import { IconAlertCircle, IconExternalLink, IconClock } from "@tabler/icons-react";
+import { useTranslations } from "next-intl";
 import { useRef, useEffect, useState, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 
@@ -69,7 +70,7 @@ function isPartEmpty(part: any): boolean {
   }
 }
 
-function renderPartContent(part: any) {
+function renderPartContent(part: any, t: (key: string, replacements?: Record<string, string | number>) => string) {
   switch (part.type) {
   case "text":
     return (
@@ -84,11 +85,11 @@ function renderPartContent(part: any) {
   case "file":
     return (
       <Stack gap="xs">
-        <Text size="sm" fw={500}>File (MIME): {part.mediaType}</Text>
+        <Text size="sm" fw={500}>{t("File (MIME):")} {part.mediaType}</Text>
         {part.mediaType?.startsWith("image/") ? (
           <Image
             src={part.url || part.data}
-            alt="Generated image"
+            alt={t("Generated image")}
             fit="contain"
             style={{ maxWidth: "100%", height: "auto" }}
           />
@@ -113,7 +114,7 @@ function renderPartContent(part: any) {
   case "source":
     return (
       <Stack gap="xs">
-        <Text size="sm" fw={500}>Source</Text>
+        <Text size="sm" fw={500}>{t("Source")}</Text>
         <Code block>
           {JSON.stringify(part.source, null, 2)}
         </Code>
@@ -122,14 +123,14 @@ function renderPartContent(part: any) {
   case "tool-invocation": {
     const toolInvocation = part.toolInvocation;
     const hasImage = toolInvocation?.result?.imageBase64;
-    
+
     return (
       <Stack gap="xs">
         {hasImage && (
           <Paper p="xs" withBorder>
             <Image
               src={`data:image/png;base64,${toolInvocation.result.imageBase64}`}
-              alt="Tool result preview"
+              alt={t("Tool result preview")}
               fit="contain"
               style={{ maxHeight: "300px" }}
             />
@@ -153,7 +154,7 @@ function renderPartContent(part: any) {
         </Stack>
       );
     }
-    
+
     return (
       <Code block>
         {JSON.stringify(part, null, 2)}
@@ -169,6 +170,7 @@ export function ChatView({ messages, error }: ChatViewProps) {
   const [isErrorModalOpen, setIsErrorModalOpen] = useState(false);
   const [isUserInteracting, setIsUserInteracting] = useState(false);
   const [isAtBottom, setIsAtBottom] = useState(true);
+  const t = useTranslations();
 
   const togglePart = (partId: string) => {
     setExpandedParts(prev => {
@@ -265,7 +267,7 @@ export function ChatView({ messages, error }: ChatViewProps) {
                           // Render text parts, reasoning, image files, and data_connector ask_to_connect directly without collapsible headers
                           return (
                             <Box key={`part-${originalIndex}`}>
-                              {renderPartContent(part)}
+                              {renderPartContent(part, t)}
                             </Box>
                           );
                         } else {
@@ -276,7 +278,7 @@ export function ChatView({ messages, error }: ChatViewProps) {
                             // Convert tool ID to human-friendly message
                             displayName = part.toolInvocation.toolId;
                           }
-                          displayName = getToolDisplayMessage(displayName);
+                          displayName = t(getToolDisplayMessage(displayName));
                           
                           // Render non-text parts with clickable headers
                           return (
@@ -295,7 +297,7 @@ export function ChatView({ messages, error }: ChatViewProps) {
                               </Text>
                               {isExpanded && (
                                 <Box mb="sm">
-                                  {renderPartContent(part)}
+                                  {renderPartContent(part, t)}
                                 </Box>
                               )}
                             </Box>
@@ -308,7 +310,9 @@ export function ChatView({ messages, error }: ChatViewProps) {
                         <Group gap="xs" style={{ alignSelf: "flex-end" }}>
                           <IconClock size={14} style={{ opacity: 0.5 }} />
                           <Text size="xs" c="dimmed">
-                            Generated in {((message.metadata.finishedAt - message.metadata.startedAt) / 1000).toFixed(2)}s
+                            {t("Generated in {{seconds}}s", {
+                              seconds: ((message.metadata.finishedAt - message.metadata.startedAt) / 1000).toFixed(2)
+                            })}
                           </Text>
                         </Group>
                       )}
@@ -320,7 +324,7 @@ export function ChatView({ messages, error }: ChatViewProps) {
             {error && (
               <Alert
                 icon={<IconAlertCircle size={16} />}
-                title="Error"
+                title={t("Error")}
                 color="red"
                 variant="light"
                 style={{ maxWidth: "100%", wordBreak: "break-word" }}
@@ -336,7 +340,7 @@ export function ChatView({ messages, error }: ChatViewProps) {
                     wordBreak: "break-word"
                   }}
                 >
-                  {error.message || "An error occurred while processing your request."}
+                  {error.message || t("An error occurred while processing your request.")}
                 </Text>
                 <Button
                   variant="subtle"
@@ -345,7 +349,7 @@ export function ChatView({ messages, error }: ChatViewProps) {
                   leftSection={<IconExternalLink size={14} />}
                   onClick={() => setIsErrorModalOpen(true)}
                 >
-                  View Full Error
+                  {t("View Full Error")}
                 </Button>
               </Alert>
             )}
@@ -358,13 +362,13 @@ export function ChatView({ messages, error }: ChatViewProps) {
       <Modal
         opened={isErrorModalOpen}
         onClose={() => setIsErrorModalOpen(false)}
-        title="Error Details"
+        title={t("Error Details")}
         size="lg"
         centered
       >
         <Box style={{ whiteSpace: "pre-wrap", fontFamily: "monospace" }}>
           <Text size="sm">
-            {error?.message || "An error occurred while processing your request."}
+            {error?.message || t("An error occurred while processing your request.")}
           </Text>
         </Box>
       </Modal>

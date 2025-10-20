@@ -1,6 +1,8 @@
 "use client";
 
 import { Box, Drawer, Stack, Text } from "@mantine/core";
+import { useTranslations } from "next-intl";
+import type React from "react";
 
 import { ReportRenderer } from "@/components/report-renderer";
 import { UiRenderer } from "@/components/ui-renderer";
@@ -11,10 +13,10 @@ const DRAWER_HEIGHT_PERCENTAGE = 100;
 const DRAWER_POSITION = "bottom";
 
 const CenteredMessage = ({ children }: { children: React.ReactNode }) => (
-  <Box 
-    h="100%" 
-    style={{ 
-      display: "flex", 
+  <Box
+    h="100%"
+    style={{
+      display: "flex",
       alignItems: "center", 
       justifyContent: "center" 
     }}
@@ -36,6 +38,7 @@ export function ArtifactView({ artifacts, isOpen, onClose }: ArtifactViewProps) 
   // Get the last artifact from the list
   logger.debug(`artifacts: ${JSON.stringify(artifacts)}`);
   const lastArtifact = artifacts.length > 0 ? artifacts[artifacts.length - 1] : null;
+  const t = useTranslations();
   return (
     <Drawer
       opened={isOpen}
@@ -55,7 +58,7 @@ export function ArtifactView({ artifacts, isOpen, onClose }: ArtifactViewProps) 
         {/* Content Area */}
         <Box style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
           {!lastArtifact ? (
-            <CenteredMessage>No artifacts available</CenteredMessage>
+            <CenteredMessage>{t("No artifacts available")}</CenteredMessage>
           ) : lastArtifact.type === "ui_bundle" ? (
             <Box h="100%" p="md">
               <UiRenderer message={lastArtifact} width="100%" height="100%" />
@@ -65,7 +68,9 @@ export function ArtifactView({ artifacts, isOpen, onClose }: ArtifactViewProps) 
               <ReportRenderer reportBundle={lastArtifact} />
             </Box>
           ) : (
-            <CenteredMessage>Unsupported artifact type: {lastArtifact.type}</CenteredMessage>
+            <CenteredMessage>
+              {t("Unsupported artifact type: {{type}}", { type: lastArtifact.type })}
+            </CenteredMessage>
           )}
         </Box>
       </Stack>

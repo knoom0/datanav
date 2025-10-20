@@ -1,29 +1,31 @@
-"use client"
+"use client";
 
-import { 
-  Menu, 
-  Avatar, 
-  Text, 
-  UnstyledButton, 
+import {
+  Menu,
+  Avatar,
+  Text,
+  UnstyledButton,
   Group
-} from "@mantine/core"
-import type { User } from "@supabase/supabase-js"
-import { 
-  IconLogout, 
-  IconUser, 
-  IconChevronDown 
-} from "@tabler/icons-react"
-import { useRouter } from "next/navigation"
-import { useEffect, useMemo, useState } from "react"
+} from "@mantine/core";
+import type { User } from "@supabase/supabase-js";
+import {
+  IconLogout,
+  IconUser,
+  IconChevronDown
+} from "@tabler/icons-react";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { useEffect, useMemo, useState } from "react";
 
-import { createClient } from "@/lib/supabase/client"
-import { isHostingEnabled } from "@/lib/util/hosting"
+import { createClient } from "@/lib/supabase/client";
+import { isHostingEnabled } from "@/lib/util/hosting";
 
 export function UserProfile() {
   const hostingEnabled = isHostingEnabled()
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(false)
   const router = useRouter()
+  const t = useTranslations()
 
   const supabase = useMemo(() => {
     if (!hostingEnabled) {
@@ -71,7 +73,7 @@ export function UserProfile() {
     return null
   }
 
-  const displayName = user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split("@")[0] || "User"
+  const displayName = user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split("@")[0] || t("User")
   const avatarUrl = user.user_metadata?.avatar_url
 
   return (
@@ -105,7 +107,7 @@ export function UserProfile() {
           onClick={handleSignOut}
           disabled={loading}
         >
-          Sign Out
+          {t("Sign Out")}
         </Menu.Item>
       </Menu.Dropdown>
     </Menu>

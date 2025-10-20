@@ -1,9 +1,9 @@
 "use client";
 
-import { 
-  Container, 
-  Stack, 
-  Group, 
+import {
+  Container,
+  Stack,
+  Group,
   Text, 
   TextInput, 
   Select, 
@@ -14,6 +14,7 @@ import {
   Loader
 } from "@mantine/core";
 import { IconSearch, IconRefresh, IconAlertCircle, IconDatabase, IconPlus } from "@tabler/icons-react";
+import { useFormatter, useTranslations } from "next-intl";
 import { useState, useEffect } from "react";
 
 import { AddDataConnectorModal } from "@/components/add-data-connector-modal";
@@ -41,6 +42,13 @@ export default function DataPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [addModalOpen, setAddModalOpen] = useState(false);
+  const t = useTranslations();
+  const format = useFormatter();
+  const filteredCount = filteredConnectors.length;
+  const totalCount = connectors.length;
+  const connectorSummary = filteredCount === 1
+    ? t("{{count}} connector", { count: format.number(filteredCount) })
+    : t("{{count}} connectors", { count: format.number(filteredCount) });
 
   // Load all connectors
   const loadConnectors = async () => {
@@ -50,14 +58,14 @@ export default function DataPage() {
     try {
       const response = await fetch("/api/data");
       if (!response.ok) {
-        throw new Error(`Failed to load connectors: ${response.statusText}`);
+        throw new Error(t("Failed to load connectors: {{status}}", { status: response.statusText }));
       }
 
       const data = await response.json();
       setConnectors(data.connectors);
       setFilteredConnectors(data.connectors);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Unknown error occurred";
+      const errorMessage = err instanceof Error ? err.message : t("Unknown error occurred");
       setError(errorMessage);
     } finally {
       setLoading(false);
@@ -119,17 +127,17 @@ export default function DataPage() {
 
   // Set page title and load connectors on mount
   useEffect(() => {
-    setTitle("Data Connectors");
+    setTitle(t("Data Connectors"));
     loadConnectors();
     cleanupStaleJobs();
-  }, [setTitle]);
+  }, [setTitle, t]);
 
   if (loading) {
     return (
       <Container size="xl" py="md">
         <Group justify="center" py="xl">
           <Loader size="lg" />
-          <Text>Loading data connectors...</Text>
+          <Text>{t("Loading data connectors...")}</Text>
         </Group>
       </Container>
     );
@@ -138,7 +146,7 @@ export default function DataPage() {
   if (error) {
     return (
       <Container size="xl" py="md">
-        <Alert icon={<IconAlertCircle size="1rem" />} color="red" title="Error">
+        <Alert icon={<IconAlertCircle size="1rem" />} color="red" title={t("Error")}>
           {error}
         </Alert>
       </Container>
@@ -153,12 +161,12 @@ export default function DataPage() {
               leftSection={<IconPlus size="1rem" />}
               onClick={() => setAddModalOpen(true)}
             >
-              Add Connector
+              {t("Add Connector")}
             </Button>
             <Text c="dimmed">
-              {filteredConnectors.length} connector{filteredConnectors.length !== 1 ? "s" : ""}
-              {filteredConnectors.length !== connectors.length && (
-                <Text span c="dimmed" size="sm"> of {connectors.length} total</Text>
+              {connectorSummary}
+              {filteredCount !== totalCount && (
+                <Text span c="dimmed" size="sm"> {t("of {{total}} total", { total: format.number(totalCount) })}</Text>
               )}
             </Text>
           </Group>
@@ -168,7 +176,7 @@ export default function DataPage() {
           <Stack gap="md">
             <Group grow>
               <TextInput
-                placeholder="Search connectors by name, description, or ID..."
+                placeholder={t("Search connectors by name, description, or ID...")}
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.currentTarget.value)}
                 leftSection={<IconSearch size={16} />}
@@ -179,30 +187,30 @@ export default function DataPage() {
                 }}
               />
               <Select
-                placeholder="Filter by status"
+                placeholder={t("Filter by status")}
                 value={statusFilter}
                 onChange={setStatusFilter}
                 data={[
-                  { value: "connected", label: "Connected" },
-                  { value: "disconnected", label: "Disconnected" }
+                  { value: "connected", label: t("Connected") },
+                  { value: "disconnected", label: t("Disconnected") }
                 ]}
                 leftSection={<IconDatabase size={16} />}
                 clearable
               />
             </Group>
             <Group>
-              <Button 
+              <Button
                 onClick={handleSearch}
                 leftSection={<IconSearch size={16} />}
               >
-                Search
+                {t("Search")}
               </Button>
-              <Button 
-                variant="light" 
+              <Button
+                variant="light"
                 onClick={handleReset}
                 leftSection={<IconRefresh size={16} />}
               >
-                Reset
+                {t("Reset")}
               </Button>
             </Group>
           </Stack>
@@ -211,11 +219,11 @@ export default function DataPage() {
         {/* Connectors List */}
         {filteredConnectors.length === 0 ? (
           <Paper p="xl" ta="center">
-            <Text size="lg" c="dimmed">No data connectors found</Text>
+            <Text size="lg" c="dimmed">{t("No data connectors found")}</Text>
             <Text size="sm" c="dimmed" mt="xs">
-              {searchQuery || statusFilter 
-                ? "Try adjusting your search criteria." 
-                : "No data connectors are currently available."}
+              {searchQuery || statusFilter
+                ? t("Try adjusting your search criteria.")
+                : t("No data connectors are currently available.")}
             </Text>
           </Paper>
         ) : (
