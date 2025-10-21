@@ -2,9 +2,10 @@
 
 import { Badge, Button, Card, Container, Group, Paper, Select, Stack, Text, TextInput, Title, Accordion, Code, ScrollArea } from "@mantine/core";
 import { IconSearch, IconPackage, IconTag, IconCode, IconRefresh, IconPlus } from "@tabler/icons-react";
+import { useFormatter, useTranslations } from "next-intl";
 import { useState, useTransition, useEffect } from "react";
 
-import { 
+import {
   getComponentsAction,
   searchComponentsAction,
   getPackageNamesAction,
@@ -27,6 +28,15 @@ export default function ComponentsPage() {
   const [hasMore, setHasMore] = useState(true);
   const [isSearching, setIsSearching] = useState(false);
   const [totalCount, setTotalCount] = useState<number>(0);
+  const t = useTranslations();
+  const format = useFormatter();
+  const visibleCount = components.length;
+  const totalSummary = totalCount === 1
+    ? t("{{count}} component total", { count: format.number(totalCount) })
+    : t("{{count}} components total", { count: format.number(totalCount) });
+  const loadedSummary = visibleCount !== totalCount
+    ? t("({{count}} loaded)", { count: format.number(visibleCount) })
+    : "";
 
   const loadComponents = async (reset = true) => {
     try {
@@ -118,18 +128,18 @@ export default function ComponentsPage() {
   };
 
   useEffect(() => {
-    setTitle("Components");
+    setTitle(t("Components"));
     loadComponents(true);
-  }, [setTitle]);
+  }, [setTitle, t]);
   
   return (
     <Container size="xl" py="md">
         <Stack gap="lg">
           <Group justify="flex-end">
             <Text c="dimmed">
-              {totalCount} component{totalCount !== 1 ? "s" : ""} total
-              {components.length !== totalCount && (
-                <Text span c="dimmed" size="sm"> ({components.length} loaded)</Text>
+              {totalSummary}
+              {loadedSummary && (
+                <Text span c="dimmed" size="sm"> {loadedSummary}</Text>
               )}
             </Text>
           </Group>
@@ -139,7 +149,7 @@ export default function ComponentsPage() {
           <Stack gap="md">
             <Group grow>
               <TextInput
-                placeholder="Search components..."
+                placeholder={t("Search components...")}
                 value={query}
                 onChange={(event) => setQuery(event.currentTarget.value)}
                 leftSection={<IconSearch size={16} />}
@@ -150,7 +160,7 @@ export default function ComponentsPage() {
                 }}
               />
               <Select
-                placeholder="Filter by package"
+                placeholder={t("Filter by package")}
                 value={selectedPackage}
                 onChange={setSelectedPackage}
                 data={packages.map(pkg => ({ value: pkg, label: pkg }))}
@@ -159,19 +169,19 @@ export default function ComponentsPage() {
               />
             </Group>
             <Group>
-              <Button 
-                onClick={handleSearch} 
+              <Button
+                onClick={handleSearch}
                 loading={isPending}
                 leftSection={<IconSearch size={16} />}
               >
-                Search
+                {t("Search")}
               </Button>
-              <Button 
-                variant="light" 
+              <Button
+                variant="light"
                 onClick={handleReset}
                 leftSection={<IconRefresh size={16} />}
               >
-                Reset
+                {t("Reset")}
               </Button>
             </Group>
           </Stack>
@@ -179,12 +189,12 @@ export default function ComponentsPage() {
 
         {/* Components List */}
         {isPending ? (
-          <Text ta="center" py="xl">Loading components...</Text>
+          <Text ta="center" py="xl">{t("Loading components...")}</Text>
         ) : components.length === 0 ? (
           <Paper p="xl" ta="center">
-            <Text size="lg" c="dimmed">No components found</Text>
+            <Text size="lg" c="dimmed">{t("No components found")}</Text>
             <Text size="sm" c="dimmed" mt="xs">
-              Try adjusting your search criteria or indexing some components first.
+              {t("Try adjusting your search criteria or indexing some components first.")}
             </Text>
           </Paper>
         ) : (
@@ -200,7 +210,7 @@ export default function ComponentsPage() {
                       </Badge>
                     </Group>
                     <Text size="xs" c="dimmed">
-                      {new Date(component.updatedAt).toLocaleDateString()}
+                      {new Date(component.updatedAt).toLocaleDateString(locale)}
                     </Text>
                   </Group>
 
@@ -220,7 +230,7 @@ export default function ComponentsPage() {
                   <Accordion variant="contained">
                     <Accordion.Item value="documentation">
                       <Accordion.Control icon={<IconCode size={16} />}>
-                        Documentation
+                        {t("Documentation")}
                       </Accordion.Control>
                       <Accordion.Panel>
                         <ScrollArea h={300}>
@@ -245,7 +255,7 @@ export default function ComponentsPage() {
                   loading={isLoadingMore}
                   onClick={loadMoreComponents}
                 >
-                  Load More Components
+                  {t("Load More Components")}
                 </Button>
               </Group>
             )}

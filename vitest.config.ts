@@ -44,7 +44,8 @@ export default defineConfig({
   // Module resolution
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, ".")
+      "@": path.resolve(__dirname, "."),
+      "next-intl": path.resolve(__dirname, "test/mocks/next-intl.ts")
     }
   },
   

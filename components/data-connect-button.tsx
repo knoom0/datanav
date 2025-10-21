@@ -2,6 +2,7 @@
 
 import { Button, Paper, Text, Group, Stack, Badge, Loader, Alert, Menu, Modal, ActionIcon, Code } from "@mantine/core";
 import { IconPlug, IconPlugConnected, IconAlertCircle, IconClock, IconRefresh, IconDots, IconTrash, IconCheck, IconX, IconInfoCircle } from "@tabler/icons-react";
+import { useFormatter, useTranslations } from "next-intl";
 import { useState, useEffect } from "react";
 
 import { DataConnectorInfo, DataJobInfo } from "@/lib/types";
@@ -25,7 +26,7 @@ interface DataConnectButtonProps {
   onDelete?: () => void;
 }
 
-export function DataConnectButton({ 
+export function DataConnectButton({
   connectorId,
   onConnectStart,
   onConnectComplete,
@@ -37,9 +38,11 @@ export function DataConnectButton({
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [errorDetailsModalOpen, setErrorDetailsModalOpen] = useState(false);
   const [jobInfo, setJobInfo] = useState<DataJobInfo | null>(null);
-  
+
   // Single loading state for all button actions
   const [isHandlingAction, setIsHandlingAction] = useState(false);
+  const t = useTranslations();
+  const format = useFormatter();
 
   // Fetch connector information
   useEffect(() => {
@@ -50,7 +53,7 @@ export function DataConnectButton({
       
       if (!response.ok) {
         const errorText = await response.text();
-        setError(`Failed to load connector: ${errorText}`);
+        setError(t("Failed to load connector: {{error}}", { error: errorText }));
         return;
       }
       
@@ -72,7 +75,7 @@ export function DataConnectButton({
         const response = await fetch(`/api/data/${connectorId}`);
         
         if (!response.ok) {
-          throw new Error(`Failed to fetch connector status: ${response.statusText}`);
+          throw new Error(t("Failed to fetch connector status: {{status}}", { status: response.statusText }));
         }
         
         const connectorData = await response.json();
@@ -96,7 +99,7 @@ export function DataConnectButton({
         }
       } catch (error) {
         console.error("Failed to poll connector status:", error);
-        setError(`Failed to check connector status: ${error}`);
+        setError(t("Failed to check connector status: {{error}}", { error: String(error) }));
         setJobInfo(null);
       }
     };
@@ -123,7 +126,7 @@ export function DataConnectButton({
 
       if (!response.ok) {
         const errorText = await response.text();
-        setError(`Authentication failed: ${errorText}`);
+        setError(t("Authentication failed: {{error}}", { error: errorText }));
         return;
       }
 
@@ -157,7 +160,7 @@ export function DataConnectButton({
 
       if (!response.ok) {
         const errorText = await response.text();
-        setError(`Load failed: ${errorText}`);
+        setError(t("Load failed: {{error}}", { error: errorText }));
         return;
       }
 
@@ -189,7 +192,7 @@ export function DataConnectButton({
 
       if (!response.ok) {
         const errorText = await response.text();
-        setError(`Disconnect failed: ${errorText}`);
+        setError(t("Disconnect failed: {{error}}", { error: errorText }));
         return;
       }
 
@@ -223,7 +226,7 @@ export function DataConnectButton({
 
       if (!response.ok) {
         const errorText = await response.text();
-        setError(`Delete failed: ${errorText}`);
+        setError(t("Delete failed: {{error}}", { error: errorText }));
         return;
       }
 
@@ -256,7 +259,7 @@ export function DataConnectButton({
 
       if (!response.ok) {
         const errorText = await response.text();
-        setError(`Connection failed: ${errorText}`);
+        setError(t("Connection failed: {{error}}", { error: errorText }));
         return;
       }
 
@@ -286,7 +289,7 @@ export function DataConnectButton({
         );
 
         if (!authWindow) {
-          setError("Failed to open authentication window. Please allow popups for this site.");
+          setError(t("Failed to open authentication window. Please allow popups for this site."));
           return;
         }
 
@@ -302,7 +305,7 @@ export function DataConnectButton({
           } else if (event.data.type === "OAUTH_ERROR") {
             window.removeEventListener("message", handleMessage);
             authWindow.close();
-            setError(event.data.error || "Authentication failed");
+            setError(event.data.error || t("Authentication failed"));
             setIsHandlingAction(false);
           }
         };
@@ -335,8 +338,8 @@ export function DataConnectButton({
 
   // Format last loaded date
   const formatLastLoaded = (date: Date | null) => {
-    if (!date) return "Never";
-    return new Date(date).toLocaleDateString("en-US", {
+    if (!date) return t("Never");
+    return new Date(date).toLocaleDateString(locale, {
       year: "numeric",
       month: "short",
       day: "numeric",
@@ -355,7 +358,7 @@ export function DataConnectButton({
         <Group gap="xs" align="center">
           <IconClock size="0.9rem" style={{ color: "var(--mantine-color-dimmed)" }} />
           <Text size="xs" c="dimmed">
-            Never loaded
+            {t("Never loaded")}
           </Text>
         </Group>
       );
@@ -377,7 +380,11 @@ export function DataConnectButton({
           {isError && <IconX size="0.9rem" style={{ color: "var(--mantine-color-red-6)" }} />}
           {isCanceled && <IconAlertCircle size="0.9rem" style={{ color: "var(--mantine-color-yellow-6)" }} />}
           <Text size="xs" c={isSuccess ? "green" : isError ? "red" : "yellow"} fw={500}>
-            Last load {isSuccess ? "successful" : isError ? "failed" : "canceled"}
+            {isSuccess
+              ? t("Last load successful")
+              : isError
+                ? t("Last load failed")
+                : t("Last load canceled")}
           </Text>
           {isError && lastDataJob.error && (
             <ActionIcon
@@ -385,7 +392,7 @@ export function DataConnectButton({
               variant="subtle"
               color="red"
               onClick={() => setErrorDetailsModalOpen(true)}
-              aria-label="View error details"
+              aria-label={t("View error details")}
             >
               <IconInfoCircle size="0.9rem" />
             </ActionIcon>
@@ -406,10 +413,10 @@ export function DataConnectButton({
   // Format job type for human-friendly display
   const formatJobType = (type: string) => {
     switch (type) {
-      case "load":
-        return "Loading";
-      default:
-        return type.charAt(0).toUpperCase() + type.slice(1);
+    case "load":
+        return t("Loading");
+    default:
+        return t(type.charAt(0).toUpperCase() + type.slice(1));
     }
   };
 
@@ -428,11 +435,13 @@ export function DataConnectButton({
 
   // Format record count for display
   const formatRecordCount = (count: number) => {
-    if (count === 0) return "0 records";
-    if (count === 1) return "1 record";
-    if (count < 1000) return `${count} records`;
-    if (count < 1000000) return `${Math.round(count / 1000)}k records`;
-    return `${Math.round(count / 1000000)}M records`;
+    if (count === 0) return t("0 records");
+    if (count === 1) return t("1 record");
+    if (count < 1000) return t("{{count}} records", { count: format.number(count) });
+    if (count < 1000000) {
+      return t("{{count}}k records", { count: format.number(Math.round(count / 1000)) });
+    }
+    return t("{{count}}M records", { count: format.number(Math.round(count / 1000000)) });
   };
 
   if (!connector) {
@@ -440,7 +449,7 @@ export function DataConnectButton({
       <Paper p="md" withBorder>
         <Group>
           <Loader size="sm" />
-          <Text>Loading connector...</Text>
+          <Text>{t("Loading connector...")}</Text>
         </Group>
       </Paper>
     );
@@ -457,7 +466,7 @@ export function DataConnectButton({
   if (!connector) {
     return (
       <Alert icon={<IconAlertCircle size="1rem" />} color="red">
-        Connector not found
+        {t("Connector not found")}
       </Alert>
     );
   }
@@ -484,31 +493,31 @@ export function DataConnectButton({
               </Menu.Target>
 
               <Menu.Dropdown>
-                <Menu.Item
-                  leftSection={<IconPlug size="0.9rem" />}
-                  onClick={handleConnect}
-                  disabled={connector.isLoading || isHandlingAction}
-                >
-                  Reconnect
-                </Menu.Item>
+              <Menu.Item
+                leftSection={<IconPlug size="0.9rem" />}
+                onClick={handleConnect}
+                disabled={connector.isLoading || isHandlingAction}
+              >
+                {t("Reconnect")}
+              </Menu.Item>
+              <Menu.Item
+                leftSection={<IconTrash size="0.9rem" />}
+                color="red"
+                onClick={() => setDisconnectModalOpen(true)}
+                disabled={!connector.isConnected || connector.isLoading || isHandlingAction}
+              >
+                {t("Disconnect")}
+              </Menu.Item>
+              {connector.isRemovable && (
                 <Menu.Item
                   leftSection={<IconTrash size="0.9rem" />}
                   color="red"
-                  onClick={() => setDisconnectModalOpen(true)}
-                  disabled={!connector.isConnected || connector.isLoading || isHandlingAction}
+                  onClick={() => setDeleteModalOpen(true)}
+                  disabled={connector.isLoading || isHandlingAction}
                 >
-                  Disconnect
+                  {t("Delete Connector")}
                 </Menu.Item>
-                {connector.isRemovable && (
-                  <Menu.Item
-                    leftSection={<IconTrash size="0.9rem" />}
-                    color="red"
-                    onClick={() => setDeleteModalOpen(true)}
-                    disabled={connector.isLoading || isHandlingAction}
-                  >
-                    Delete Connector
-                  </Menu.Item>
-                )}
+              )}
               </Menu.Dropdown>
             </Menu>
           </Group>
@@ -533,10 +542,10 @@ export function DataConnectButton({
             }
           >
             {connector.isLoading
-              ? "Loading..." 
-              : connector.isConnected 
-                ? "Connected" 
-                : "Not Connected"
+              ? t("Loading...")
+              : connector.isConnected
+                ? t("Connected")
+                : t("Not Connected")
             }
           </Badge>
 
@@ -545,7 +554,7 @@ export function DataConnectButton({
             <Stack gap="xs">
               <Group gap="xs" align="center">
                 <Text size="sm" fw={500}>
-                  {formatJobType(jobInfo.type || "unknown")} Job
+                  {formatJobType(jobInfo.type || "unknown")} {t("Job")}
                 </Text>
                 {(jobInfo.progress?.updatedRecordCount !== undefined || 
                   (jobInfo.runTimeMs !== undefined && jobInfo.runTimeMs > 0)) && (
@@ -585,7 +594,7 @@ export function DataConnectButton({
               variant="light"
               size="sm"
             >
-              Load Data
+              {t("Load Data")}
             </Button>
           )}
           {!connector.isConnected && (
@@ -597,7 +606,7 @@ export function DataConnectButton({
               variant="filled"
               size="sm"
             >
-              Connect
+              {t("Connect")}
             </Button>
           )}
         </Group>
@@ -606,18 +615,17 @@ export function DataConnectButton({
       <Modal
         opened={disconnectModalOpen}
         onClose={() => setDisconnectModalOpen(false)}
-        title="Disconnect Data Source"
+        title={t("Disconnect Data Source")}
         centered
       >
         <Stack gap="md">
           <Text>
-            Are you sure you want to disconnect <strong>{connector.name}</strong>?
+            {t("Are you sure you want to disconnect {{name}}?", { name: connector.name })}
           </Text>
-          
+
           <Alert color="red" icon={<IconAlertCircle size="1rem" />}>
             <Text size="sm">
-              This will permanently delete all loaded data for this connector and cannot be undone.
-              You will need to reconnect and reload data to use this connector again.
+              {t("This will permanently delete all loaded data for this connector and cannot be undone. You will need to reconnect and reload data to use this connector again.")}
             </Text>
           </Alert>
 
@@ -627,7 +635,7 @@ export function DataConnectButton({
               onClick={() => setDisconnectModalOpen(false)}
               disabled={connector.isLoading || isHandlingAction}
             >
-              Cancel
+              {t("Cancel")}
             </Button>
             <Button
               color="red"
@@ -636,7 +644,7 @@ export function DataConnectButton({
               disabled={connector.isLoading || isHandlingAction}
               leftSection={<IconTrash size="1rem" />}
             >
-              Disconnect & Clear Data
+              {t("Disconnect & Clear Data")}
             </Button>
           </Group>
         </Stack>
@@ -645,26 +653,26 @@ export function DataConnectButton({
       <Modal
         opened={deleteModalOpen}
         onClose={() => setDeleteModalOpen(false)}
-        title="Delete Data Connector"
+        title={t("Delete Data Connector")}
         centered
       >
         <Stack gap="md">
           <Text>
-            Are you sure you want to permanently delete <strong>{connector.name}</strong>?
+            {t("Are you sure you want to permanently delete {{name}}?", { name: connector.name })}
           </Text>
-          
+
           <Alert color="red" icon={<IconAlertCircle size="1rem" />}>
             <Stack gap="xs">
               <Text size="sm" fw={500}>
-                This action cannot be undone!
+                {t("This action cannot be undone!")}
               </Text>
               <Text size="sm">
-                This will:
+                {t("This will:")}
               </Text>
               <Text size="sm" component="ul" style={{ margin: 0, paddingLeft: "1.5rem" }}>
-                <li>Delete the connector configuration</li>
-                <li>Remove all loaded data</li>
-                <li>Clear all connection settings</li>
+                <li>{t("Delete the connector configuration")}</li>
+                <li>{t("Remove all loaded data")}</li>
+                <li>{t("Clear all connection settings")}</li>
               </Text>
             </Stack>
           </Alert>
@@ -675,7 +683,7 @@ export function DataConnectButton({
               onClick={() => setDeleteModalOpen(false)}
               disabled={isHandlingAction}
             >
-              Cancel
+              {t("Cancel")}
             </Button>
             <Button
               color="red"
@@ -684,7 +692,7 @@ export function DataConnectButton({
               disabled={isHandlingAction}
               leftSection={<IconTrash size="1rem" />}
             >
-              Delete Permanently
+              {t("Delete Permanently")}
             </Button>
           </Group>
         </Stack>
@@ -693,24 +701,24 @@ export function DataConnectButton({
       <Modal
         opened={errorDetailsModalOpen}
         onClose={() => setErrorDetailsModalOpen(false)}
-        title="Error Details"
+        title={t("Error Details")}
         centered
         size="lg"
       >
         <Stack gap="md">
           <Text size="sm">
-            The last data load job failed with the following error:
+            {t("The last data load job failed with the following error:")}
           </Text>
-          
+
           <Code block style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-            {connector?.lastDataJob?.error || "No error details available"}
+            {connector?.lastDataJob?.error || t("No error details available")}
           </Code>
 
           <Group justify="flex-end" gap="sm">
             <Button
               onClick={() => setErrorDetailsModalOpen(false)}
             >
-              Close
+              {t("Close")}
             </Button>
           </Group>
         </Stack>

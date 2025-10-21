@@ -4,6 +4,7 @@ import { useChat } from "@ai-sdk/react";
 import { Box, Stack, Group, Button } from "@mantine/core";
 import { IconEye } from "@tabler/icons-react";
 import { DefaultChatTransport } from "ai";
+import { useTranslations } from "next-intl";
 import { useState, use, useEffect } from "react";
 
 import AgentInput from "@/components/agent-input";
@@ -22,6 +23,7 @@ interface ChatPageProps {
 export default function ChatPage({ params }: ChatPageProps) {
   const { sessionId } = use(params);
   const { setTitle } = useAppTitle();
+  const t = useTranslations();
   
   const useChatHelpers = useChat<TypedUIMessage>({
     transport: new DefaultChatTransport({
@@ -51,8 +53,8 @@ export default function ChatPage({ params }: ChatPageProps) {
 
   // Set page title when component mounts
   useEffect(() => {
-    setTitle("DataNav");
-  }, [setTitle]);
+    setTitle(t("DataNav"));
+  }, [setTitle, t]);
 
   // Show loading state while sessionId is being resolved
   if (!sessionId) {
@@ -82,10 +84,10 @@ export default function ChatPage({ params }: ChatPageProps) {
                 size="md"
                 variant="filled"
                 onClick={() => setIsOverlayOpen(true)}
-                title="Open artifact view"
+                title={t("Open artifact view")}
                 leftSection={<IconEye size={16} />}
               >
-                Show Report
+                {t("Show Report")}
               </Button>
             </Group>
           )}
