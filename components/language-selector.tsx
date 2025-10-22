@@ -3,8 +3,9 @@
 import { ActionIcon, Menu, Text } from "@mantine/core";
 import { IconCheck, IconLanguage } from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
-import { useLocale, useTranslations } from "next-intl";
 import { useTransition } from "react";
+
+import { useLocale, useTranslations } from "next-intl";
 
 import { setLocale } from "@/actions/locale";
 import { localeOptions } from "@/lib/i18n/config";

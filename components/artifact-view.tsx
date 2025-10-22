@@ -1,8 +1,9 @@
 "use client";
 
 import { Box, Drawer, Stack, Text } from "@mantine/core";
-import { useTranslations } from "next-intl";
 import type React from "react";
+
+import { useTranslations } from "next-intl";
 
 import { ReportRenderer } from "@/components/report-renderer";
 import { UiRenderer } from "@/components/ui-renderer";

@@ -3,8 +3,9 @@
 import { UseChatHelpers, UIMessage } from "@ai-sdk/react";
 import { ActionIcon, Box, Group, Paper, Stack, Textarea } from "@mantine/core";
 import { IconPlayerPlay, IconPlayerStop } from "@tabler/icons-react";
-import { useTranslations } from "next-intl";
 import { useState, type ChangeEvent, type FormEvent } from "react";
+
+import { useTranslations } from "next-intl";
 
 interface AgentInputProps<T extends UIMessage = UIMessage> {
   useChatHelpers: UseChatHelpers<T>;

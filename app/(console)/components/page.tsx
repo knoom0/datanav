@@ -2,8 +2,9 @@
 
 import { Badge, Button, Card, Container, Group, Paper, Select, Stack, Text, TextInput, Title, Accordion, Code, ScrollArea } from "@mantine/core";
 import { IconSearch, IconPackage, IconTag, IconCode, IconRefresh, IconPlus } from "@tabler/icons-react";
-import { useFormatter, useTranslations } from "next-intl";
 import { useState, useTransition, useEffect } from "react";
+
+import { useFormatter, useTranslations } from "next-intl";
 
 import {
   getComponentsAction,

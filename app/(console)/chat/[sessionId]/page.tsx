@@ -4,8 +4,9 @@ import { useChat } from "@ai-sdk/react";
 import { Box, Stack, Group, Button } from "@mantine/core";
 import { IconEye } from "@tabler/icons-react";
 import { DefaultChatTransport } from "ai";
-import { useTranslations } from "next-intl";
 import { useState, use, useEffect } from "react";
+
+import { useTranslations } from "next-intl";
 
 import AgentInput from "@/components/agent-input";
 import { useAppTitle } from "@/components/app-title-context";

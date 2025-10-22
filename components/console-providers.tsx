@@ -1,8 +1,9 @@
 "use client";
 
 import { MantineProvider } from "@mantine/core";
-import { NextIntlClientProvider, type AbstractIntlMessages } from "next-intl";
 import type React from "react";
+
+import { NextIntlClientProvider, type AbstractIntlMessages } from "next-intl";
 
 import { AppTitleProvider } from "@/components/app-title-context";
 import { ConsoleLayout } from "@/components/console-layout";

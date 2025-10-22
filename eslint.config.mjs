@@ -63,6 +63,13 @@ export default defineConfig([{
             groups: ["builtin", "external", "internal", "parent", "sibling", "index"],
             "newlines-between": "always",
 
+            pathGroups: [
+                { pattern: "next-intl", group: "external", position: "after" },
+                { pattern: "@/**", group: "internal" },
+            ],
+
+            pathGroupsExcludedImportTypes: ["builtin"],
+
             alphabetize: {
                 order: "asc",
                 caseInsensitive: true,

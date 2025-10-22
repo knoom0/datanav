@@ -14,8 +14,9 @@ import {
   Loader
 } from "@mantine/core";
 import { IconSearch, IconRefresh, IconAlertCircle, IconDatabase, IconPlus } from "@tabler/icons-react";
-import { useFormatter, useTranslations } from "next-intl";
 import { useState, useEffect } from "react";
+
+import { useFormatter, useTranslations } from "next-intl";
 
 import { AddDataConnectorModal } from "@/components/add-data-connector-modal";
 import { useAppTitle } from "@/components/app-title-context";

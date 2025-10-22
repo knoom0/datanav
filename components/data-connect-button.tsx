@@ -2,8 +2,9 @@
 
 import { Button, Paper, Text, Group, Stack, Badge, Loader, Alert, Menu, Modal, ActionIcon, Code } from "@mantine/core";
 import { IconPlug, IconPlugConnected, IconAlertCircle, IconClock, IconRefresh, IconDots, IconTrash, IconCheck, IconX, IconInfoCircle } from "@tabler/icons-react";
-import { useFormatter, useTranslations } from "next-intl";
 import { useState, useEffect } from "react";
+
+import { useFormatter, useTranslations } from "next-intl";
 
 import { DataConnectorInfo, DataJobInfo } from "@/lib/types";
 

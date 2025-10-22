@@ -2,9 +2,10 @@
 
 import { Paper, Box, Stack, Group, Container, ScrollArea, Text, Code, Image, Alert, Modal, Button } from "@mantine/core";
 import { IconAlertCircle, IconExternalLink, IconClock } from "@tabler/icons-react";
-import { useTranslations, type TranslationValues } from "next-intl";
 import { useRef, useEffect, useState, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
+
+import { useTranslations, type TranslationValues } from "next-intl";
 
 import { DataConnectButton } from "@/components/data-connect-button";
 import { TypedUIMessage } from "@/lib/types";

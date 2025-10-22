@@ -9,8 +9,9 @@ import { AppShell, AppShellHeader, AppShellMain, AppShellNavbar, Burger, Group, 
 import { useDisclosure } from "@mantine/hooks";
 import { IconBuilding, IconDatabase, IconComponents, IconPlus } from "@tabler/icons-react";
 import Link from "next/link";
-import { useTranslations } from "next-intl";
 import type React from "react";
+
+import { useTranslations } from "next-intl";
 
 import { useAppTitle } from "@/components/app-title-context";
 import { LanguageSelector } from "@/components/language-selector";
