@@ -71,17 +71,19 @@ function buildConfig(rawConfig: any) {
 let cachedConfig: Config | null = null;
 
 export function getConfig(): Config {
+  // Prevent usage in browser environment
+  if (typeof window !== "undefined") {
+    throw new Error(
+      "getConfig() cannot be called in browser environment. " +
+      "This is a server-side only module. " +
+      "Use isHostingEnabled() from @/lib/util/hosting instead."
+    );
+  }
+  
   if (!cachedConfig) {
     cachedConfig = buildConfig(rawConfig) as Config;
   }
   return cachedConfig;
-}
-
-export function getImportMap(): Record<string, any> {
-  const packages = getConfig().packages;
-  
-  // Return the packages map directly since it's already in the correct format
-  return { ...packages };
 }
 
 export const defaultAgentConfig = () => getConfig().agent;

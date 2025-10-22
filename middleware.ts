@@ -1,21 +1,33 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { getConfig } from "@/lib/config";
+import { HOSTING_ENABLED_COOKIE } from "@/lib/consts";
 import { createClient } from "@/lib/supabase/server";
 
 export async function middleware(request: NextRequest) {
-  const config = getConfig()
+  const config = getConfig();
+  const hostingEnabled = config.hosting.enabled;
+  
+  // Create base response
+  const response = NextResponse.next({
+    request,
+  });
+  
+  // Set hosting status cookie so client components can access it
+  response.cookies.set(HOSTING_ENABLED_COOKIE, String(hostingEnabled), {
+    path: "/",
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+  });
   
   // If hosting is disabled, skip authentication checks entirely
-  if (!config.hosting.enabled) {
-    return NextResponse.next({
-      request,
-    })
+  if (!hostingEnabled) {
+    return response;
   }
 
   const supabaseResponse = NextResponse.next({
     request,
-  })
+  });
 
   const supabase = await createClient({ request, response: supabaseResponse })
 
@@ -49,7 +61,14 @@ export async function middleware(request: NextRequest) {
   //    myNewResponse.cookies.setAll(supabaseResponse.cookies.getAll())
   // 3. Change the myNewResponse object instead of the supabaseResponse object
 
-  return supabaseResponse
+  // Copy hosting cookie to supabaseResponse
+  supabaseResponse.cookies.set(HOSTING_ENABLED_COOKIE, String(hostingEnabled), {
+    path: "/",
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+  });
+
+  return supabaseResponse;
 }
 
 export const config = {

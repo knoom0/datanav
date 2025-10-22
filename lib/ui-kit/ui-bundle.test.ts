@@ -1,4 +1,4 @@
-import { getImportMap } from "@/lib/config";
+import { getConfig } from "@/lib/config";
 import { UIBundle } from "@/lib/types";
 import { compileModule } from "@/lib/ui-kit/code-compiler";
 import { UIBundleError, loadUIBundle, renderStackContext } from "@/lib/ui-kit/ui-bundle";
@@ -186,7 +186,7 @@ describe("loadUIBundle", () => {
     it("should work with custom imports", async () => {
       const customImports = {
         "custom": { customHelper: () => "Custom Result" },
-        ...getImportMap()  // Include existing import map
+        ...getConfig().packages  // Include existing packages
       };
       const bundleWithImports = await compileModule({
         tsCode: `import { customHelper } from 'custom';

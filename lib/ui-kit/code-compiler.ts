@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { Project, ScriptTarget, ModuleKind, ts } from "ts-morph";
 
-import { getImportMap } from "@/lib/config";
+import { getConfig } from "@/lib/config";
 import { UIBundle } from "@/lib/types";
 import { loadUIBundle } from "@/lib/ui-kit/ui-bundle";
 
@@ -251,7 +251,7 @@ function extractSourceMapFromCode(compiledCode: string): object | null {
  * @param options - Compilation options
  * @param options.tsCode - The TypeScript code string representing a module.
  * @param options.filename - Optional filename for the source file (defaults to "temp.tsx").
- * @param options.imports - Optional imports map to use for module imports. If not provided, uses getImportMap().
+ * @param options.imports - Optional imports map to use for module imports. If not provided, uses getConfig().packages.
  * @param options.skipTestLoading - Optional flag to skip test loading of the compiled code (defaults to false).
  * @returns The UIBundle containing sourceCode, compiledCode, sourceMap, and dataSpec.
  */
@@ -266,8 +266,8 @@ export async function compileModule({
   imports?: Record<string, any>;
   skipTestLoading?: boolean;
 }): Promise<UIBundle> {
-  // Use provided imports or default to getImportMap()
-  const resolvedImports = imports ?? getImportMap();
+  // Use provided imports or default to getConfig().packages
+  const resolvedImports = imports ?? getConfig().packages;
 
   // Compile the TypeScript code to JavaScript
   const jsCode = await transpileToJSFunctionCode({ tsCode, filename, imports: resolvedImports });

@@ -1,3 +1,5 @@
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+
 import { getConfig } from "@/lib/config";
 
 describe("Config Functions", () => {
@@ -24,6 +26,24 @@ describe("Config Functions", () => {
     Object.entries(config.packages).forEach(([name, module]) => {
       expect(typeof name).toBe("string");
       expect(module).toBeDefined();
+    });
+  });
+
+  describe("Browser environment protection", () => {
+    beforeEach(() => {
+      // Mock browser environment
+      global.window = {} as any;
+    });
+
+    afterEach(() => {
+      // Clean up
+      delete (global as any).window;
+    });
+
+    it("should throw error when getConfig is called in browser environment", () => {
+      expect(() => getConfig()).toThrow(
+        "getConfig() cannot be called in browser environment"
+      );
     });
   });
 }); 
