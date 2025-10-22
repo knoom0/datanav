@@ -16,11 +16,11 @@ import {
 import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
 
-import { createClient } from "@/lib/supabase/client"
-import { isHostingEnabled } from "@/lib/util/hosting"
+import { createClient } from "@/lib/supabase/client";
+import { isHostingEnabled } from "@/lib/util/hosting";
 
 export function UserProfile() {
-  const hostingEnabled = isHostingEnabled()
+  const hostingEnabled = isHostingEnabled();
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(false)
   const router = useRouter()

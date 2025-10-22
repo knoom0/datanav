@@ -18,21 +18,21 @@ import { IconAlertCircle } from "@tabler/icons-react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Suspense, useState } from "react"
 
-import { createClient } from "@/lib/supabase/client"
-import { isHostingEnabled } from "@/lib/util/hosting"
+import { createClient } from "@/lib/supabase/client";
+import { isHostingEnabled } from "@/lib/util/hosting";
 
 function LoginPageContent() {
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<string | null>("signin")
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<string | null>("signin");
   
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const redirectTo = searchParams.get("redirectTo") || "/chat"
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectTo = searchParams.get("redirectTo") || "/chat";
   
-  const hostingEnabled = isHostingEnabled()
+  const hostingEnabled = isHostingEnabled();
 
   if (!hostingEnabled) {
     return (

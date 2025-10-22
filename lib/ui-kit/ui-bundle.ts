@@ -1,7 +1,7 @@
 import { TraceMap, originalPositionFor } from "@jridgewell/trace-mapping";
 import * as stackTraceParser from "stacktrace-parser";
 
-import { getImportMap } from "@/lib/config";
+import { getConfig } from "@/lib/config";
 import { ActionableError, UIBundle } from "@/lib/types";
 
 // Maximum number of stack frames to include when rendering stack context
@@ -145,7 +145,7 @@ export function renderStackContext(stack: string, uiBundle: UIBundle): string {
  * @returns The default export from the executed module.
  */
 export function loadUIBundle(bundle: UIBundle, imports: Record<string, any> = {}): any {
-  const resolvedImports = Object.keys(imports).length === 0 ? getImportMap() : imports;
+  const resolvedImports = Object.keys(imports).length === 0 ? getConfig().packages : imports;
   const exports: Record<string, any> = {};
 
   try {

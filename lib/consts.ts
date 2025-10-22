@@ -17,3 +17,8 @@ export const DEFAULT_MAX_STEP = 100;
 export const DATA_CONNECTOR_URLS = {
   AUTH_CALLBACK_PATH: "/data/auth-callback",
 } as const;
+
+/**
+ * Cookie name for hosting mode status
+ */
+export const HOSTING_ENABLED_COOKIE = "x-hosting-enabled";

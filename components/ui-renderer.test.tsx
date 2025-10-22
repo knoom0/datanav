@@ -14,12 +14,14 @@ import { UIBundleError } from "@/lib/ui-kit/ui-bundle";
 // Mock the config functions
 vi.mock("@/lib/config", () => ({
   getConfig: () => ({
-    packages: ["react"],
+    packages: {
+      react: React,
+    },
     agent: {},
-    db: {},
-  }),
-  getImportMap: () => ({
-    react: React,
+    database: {},
+    github: { repo: "" },
+    hosting: { enabled: false },
+    job: { maxJobDurationMs: 0 },
   }),
 }));
 
