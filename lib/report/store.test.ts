@@ -1,21 +1,28 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from "vitest";
 
 import { ReportBundleEntity } from "@/lib/entities";
 import { ReportStore } from "@/lib/report/store";
-import { getTestDataSource } from "@/lib/util/test-util";
+import { setupSQLiteTestDatabase, teardownSQLiteTestDatabase, getSQLiteTestDataSource } from "@/lib/util/test-util";
 
 describe("ReportStore", () => {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  let store: ReturnType<typeof getTestDataSource> extends Promise<infer T> ? ReportStore : never;
+  let store: ReportStore;
+
+  beforeAll(async () => {
+    await setupSQLiteTestDatabase();
+  });
+
+  afterAll(async () => {
+    await teardownSQLiteTestDatabase();
+  });
 
   beforeEach(async () => {
-    const dataSource = await getTestDataSource();
+    const dataSource = getSQLiteTestDataSource();
     store = new ReportStore({ dataSource });
   });
 
   afterEach(async () => {
     // Clean up test data
-    const dataSource = await getTestDataSource();
+    const dataSource = getSQLiteTestDataSource();
     await dataSource.getRepository(ReportBundleEntity).clear();
   });
 
