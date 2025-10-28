@@ -81,6 +81,10 @@ export function getConfig(): Config {
   // Currently disabled due to test failures. Should be re-enabled after
   // fixing test mocks to properly handle server-only modules.
   
+  // TODO: Add browser environment check to prevent client-side usage
+  // Currently disabled due to test failures. Should be re-enabled after
+  // fixing test mocks to properly handle server-only modules.
+  
   if (!cachedConfig) {
     cachedConfig = buildConfig(rawConfig) as Config;
   }

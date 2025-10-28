@@ -42,13 +42,13 @@ export const config = {
     }
   },
 
+  github: {
+    repo: "knoom0/datanav",
+  },
+
   email: {
     sender: "noreply@datanav.app",
     senderName: "DataNav"
-  },
-
-  github: {
-    repo: "knoom0/datanav",
   },
 
   hosting: {
