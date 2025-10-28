@@ -2,9 +2,8 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 
-import { createUIMessageStream, type UIMessageStreamWriter } from "ai";
+import { createUIMessageStream, type UIMessageStreamWriter, readUIMessageStream } from "ai";
 
-import { agentStreamToMessage } from "@/lib/agent/core/agent";
 import { DesignGen } from "@/lib/agent/designing/design-gen";
 import { DEFAULT_QA_MODEL } from "@/lib/consts";
 import { Project, PRD, Design, ProjectConfig } from "@/lib/types";
@@ -61,7 +60,12 @@ describeIf(
         }
       });
 
-      await agentStreamToMessage(stream);
+      // Consume the stream
+      const messageStream = readUIMessageStream({ stream });
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      for await (const _message of messageStream) {
+        // Just consume the stream
+      }
 
       expect(error).toBeTruthy();
       expect(error.message).toContain("A project must have a PRD artifact");
@@ -114,7 +118,12 @@ A single screen that displays product information and allows users to add items 
         }
       });
 
-      await agentStreamToMessage(stream);
+      // Consume the stream
+      const messageStream = readUIMessageStream({ stream });
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      for await (const _message of messageStream) {
+        // Just consume the stream
+      }
 
       // Check for errors first
       if (error) {

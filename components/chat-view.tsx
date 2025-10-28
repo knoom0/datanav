@@ -35,6 +35,7 @@ function getToolDisplayMessage(toolId: string): string {
 interface ChatViewProps {
   messages: TypedUIMessage[];
   error?: Error | null;
+  hideUserMessages?: boolean;
 }
 
 /**
@@ -163,7 +164,7 @@ function renderPartContent(part: any) {
   }
 }
 
-export function ChatView({ messages, error }: ChatViewProps) {
+export function ChatView({ messages, error, hideUserMessages = false }: ChatViewProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const [expandedParts, setExpandedParts] = useState<Set<string>>(new Set());
@@ -225,7 +226,7 @@ export function ChatView({ messages, error }: ChatViewProps) {
           <Stack gap="md" p="md">
             {messages.map((message) => (
               <Box key={message.id}>
-                {message.role === "user" && (
+                {!hideUserMessages && message.role === "user" && (
                   <Group justify="flex-start">
                     <Paper
                       px="md"

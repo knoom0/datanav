@@ -1,6 +1,6 @@
 import { DataSource } from "typeorm";
 
-import { ComponentInfoEntity } from "@/lib/data/entities";
+import { ComponentInfoEntity } from "@/lib/entities";
 import { ComponentInfo } from "@/lib/types";
 import {
   saveComponentInfo,

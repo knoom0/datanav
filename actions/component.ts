@@ -1,6 +1,6 @@
 "use server";
 
-import { getUserDataSource } from "@/lib/data/entities";
+import { getUserDataSource } from "@/lib/entities";
 import { ComponentInfo } from "@/lib/types";
 import { 
   getAllComponentInfo, 

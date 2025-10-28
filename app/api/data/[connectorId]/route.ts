@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { DataCatalog } from "@/lib/data/catalog";
-import { getUserDataSource } from "@/lib/data/entities";
+import { getUserDataSource } from "@/lib/entities";
 import { APIError } from "@/lib/errors";
 import { withAPIErrorHandler } from "@/lib/util/api-utils";
 

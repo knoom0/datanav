@@ -7,7 +7,7 @@ import "@gfazioli/mantine-split-pane/styles.css";
 
 import { AppShell, AppShellHeader, AppShellMain, AppShellNavbar, Burger, Group, MantineProvider, Text, ActionIcon, Stack, ScrollArea, Image } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
-import { IconBuilding, IconDatabase, IconComponents, IconPlus } from "@tabler/icons-react";
+import { IconBuilding, IconDatabase, IconComponents, IconPlus, IconClock } from "@tabler/icons-react";
 import Link from "next/link";
 
 import { AppTitleProvider, useAppTitle } from "@/components/app-title-context";
@@ -15,6 +15,7 @@ import { UserProfile } from "@/components/user-profile";
 
 const navbarConfig = [
   { icon: <IconBuilding size={24} />, label: "New Chat", href: "/chat" },
+  { icon: <IconClock size={24} />, label: "Pulse", href: "/pulse" },
   { icon: <IconDatabase size={24} />, label: "Data", href: "/data" },
   { icon: <IconComponents size={24} />, label: "Components", href: "/components" },
 ];
@@ -45,7 +46,11 @@ function ConsoleLayout({
           <Group>
             <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />
             <Image src="/logo.png" alt="DataNav" h={32} w="auto" />
-            <Text size="lg" fw={500}>{title}</Text>
+            <Group gap="xs">
+              <Text size="lg" fw={500} visibleFrom="sm">DataNav</Text>
+              <Text size="sm" c="dimmed" visibleFrom="sm">&gt;</Text>
+              <Text size="lg" fw={500}>{title}</Text>
+            </Group>
           </Group>
           
           <Group gap="xs">

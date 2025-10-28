@@ -5,7 +5,7 @@ import { PlanGen } from "@/lib/agent/planning/plan-gen";
 import { ReportingAgent } from "@/lib/agent/reporting/agent";
 import { DataCatalog } from "@/lib/data/catalog";
 import { DatabaseClient } from "@/lib/data/db-client";
-import { getUserDataSource } from "@/lib/data/entities";
+import { getUserDataSource } from "@/lib/entities";
 import { Project } from "@/lib/types";
 import { filterUserMessages } from "@/lib/util/message-util";
 

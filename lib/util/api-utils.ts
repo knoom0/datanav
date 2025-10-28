@@ -2,6 +2,8 @@ import { AxiosError } from "axios";
 import { NextResponse } from "next/server";
 
 import { APIError } from "@/lib/errors";
+import logger from "@/lib/logger";
+import { safeErrorString } from "@/lib/util/log-util";
 
 interface AxiosErrorResponse {
   error_message?: string;
@@ -54,6 +56,7 @@ export function withAPIErrorHandler(handler: APIHandler) {
     try {
       return await handler(...args);
     } catch (error) {
+      logger.error(`API handler error: ${safeErrorString(error)}`);
       return handleAPIError(error);
     }
   };
@@ -84,14 +87,16 @@ export async function callInternalAPI(params: {
     const baseUrl = new URL(request.url).origin;
     const url = `${baseUrl}${endpoint}`;
     
-    // Extract cookies from the original request for authentication
+    // Extract cookies and authorization header from the original request for authentication
     const cookieHeader = request.headers.get("cookie");
+    const authHeader = request.headers.get("authorization");
     
     const response = await fetch(url, {
       method,
       headers: {
         "Content-Type": "application/json",
         ...(cookieHeader && { "Cookie": cookieHeader }),
+        ...(authHeader && { "Authorization": authHeader }),
         ...headers,
       },
       ...(body && { body: JSON.stringify(body) }),

@@ -4,8 +4,8 @@ import { DataSource } from "typeorm";
 
 import { DataConnector, DataConnectorConfig } from "@/lib/data/connector";
 import { dataConnectorConfigs } from "@/lib/data/connector-config";
-import { DataConnectorConfigEntity, DataConnectorStatusEntity, DataJobEntity } from "@/lib/data/entities";
 import { createDataLoader } from "@/lib/data/loader/index";
+import { DataConnectorConfigEntity, DataConnectorStatusEntity, DataJobEntity } from "@/lib/entities";
 import { APIError } from "@/lib/errors";
 import logger from "@/lib/logger";
 import { DataConnectorInfo, DataJobInfo } from "@/lib/types";

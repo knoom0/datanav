@@ -1,7 +1,7 @@
 import { LanguageModelV2 } from "@ai-sdk/provider";
 import { streamText, type ModelMessage, type UIMessageStreamWriter, stepCountIs } from "ai";
 
-import { EvoAgentBase, createToolsMap, IterationResult, pipeUIMessageStream, getAgentModel, isReasoningModel } from "@/lib/agent/core/agent";
+import { EvoAgentBase, createToolsMap, IterationResult, pipeUIMessageStream, getAgentModel, isReasoningModel, generateSessionContext } from "@/lib/agent/core/agent";
 import { DatabaseClientTool } from "@/lib/agent/tool/db-client-tool";
 import { ProjectTool } from "@/lib/agent/tool/project-tool";
 import { DEFAULT_MAX_STEP } from "@/lib/consts";
@@ -65,11 +65,10 @@ async function makeReportBundle({ reportArtifact, dbTool }: { reportArtifact: Re
 }
 
 function systemMessageTemplate({model}: {model: LanguageModelV2}): string {
-  const currentDateTime = new Date().toISOString().replace("T", " ").slice(0, 19) + " UTC";
   return `
-You are a data reporting specialist participating in a data analysis project.
+${generateSessionContext()}
 
-Current date and time: ${currentDateTime}
+You are a data reporting specialist participating in a data analysis project.
 
 Your task is to read the project requirements, analyze the data using the provided SQL queries, and generate a comprehensive card-style report optimized for mobile viewing.
 
@@ -84,9 +83,16 @@ Your task is to read the project requirements, analyze the data using the provid
 6. Give a one-line summary of your work to the user.
 </Instructions>
 
-
 <Report Format>
 The report should be in markdown format with the following special notations:
+- Summary: this section summarizes key insights from the report. It should be short, to the point and include the key numbers if possible. It should be placed at the top using the following notation:
+
+\`\`\`summary
+- Key Insight 1
+- Key Insight 2
+- Key Insight 3
+\`\`\`
+
 - Charts: you can embed charts based on data spec queries using the following notation:
 
 \`\`\`chart
@@ -245,6 +251,9 @@ export class ReportingAgent extends EvoAgentBase {
       reportArtifact: reportArtifact as Report, 
       dbTool 
     });
+
+    // Store the report bundle in the project
+    this.project.put(reportBundle);
 
     await writer.write({
       type: REPORT_BUNDLE_PART_TYPE,

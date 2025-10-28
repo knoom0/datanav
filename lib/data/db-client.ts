@@ -1,6 +1,6 @@
 import { DataSource, QueryRunner, Table } from "typeorm";
 
-import { SCHEMA_NAME } from "@/lib/data/entities";
+import { SCHEMA_NAME, DataTableStatusEntity } from "@/lib/entities";
 import { TableInfo } from "@/lib/types";
 
 
@@ -64,16 +64,30 @@ export class DatabaseClient {
       const tables = await conn.getTables();
       const systemSchemas = ["information_schema", "pg_catalog", "pg_toast", "pg_temp_1", "pg_toast_temp_1", SCHEMA_NAME];
 
+      // Get data source and query for table status information
+      const dataSource = await this.getDataSource();
+      const tableStatusRepo = dataSource.getRepository(DataTableStatusEntity);
+      const tableStatuses = await tableStatusRepo.find();
+      
+      // Create a map for quick lookup by table name
+      const tableStatusMap = new Map<string, DataTableStatusEntity>();
+      for (const status of tableStatuses) {
+        tableStatusMap.set(status.tableName, status);
+      }
+
       for (const table of tables) {
         // Skip tables from system schemas
         if (table.schema && systemSchemas.includes(table.schema)) {
           continue;
         }
         
+        const tableStatus = tableStatusMap.get(table.name);
         tableInfos[table.name] = {
           schema: table.schema,
           name: table.name,
-          ddl: generateDDL(table)
+          ddl: generateDDL(table),
+          dataConnectorId: tableStatus?.connectorId,
+          lastSyncedAt: tableStatus?.lastSyncedAt
         };
       }
 

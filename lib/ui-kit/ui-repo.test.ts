@@ -1,6 +1,6 @@
 import { DataSource } from "typeorm";
 
-import { UIBundleEntity } from "@/lib/data/entities";
+import { UIBundleEntity } from "@/lib/entities";
 import type { UIBundle, DataSpec } from "@/lib/types";
 import {
   setupTestDatabase,

@@ -13,27 +13,6 @@ import { safeErrorString } from "@/lib/util/log-util";
 export const SCHEMA_NAME = "datanav";
 
 
-@Entity({ name: "ui_bundle", schema: SCHEMA_NAME })
-export class UIBundleEntity extends BaseEntity {
-  @PrimaryColumn({ type: "varchar" })
-    uuid!: string;
-
-  @Column({ type: "varchar" })
-    type!: string;
-
-  @Column({ type: "text" })
-    sourceCode!: string;
-
-  @Column({ type: "text" })
-    compiledCode!: string;
-
-  @Column({ type: "json", nullable: true })
-    sourceMap!: object;
-
-  @Column({ type: "json" })
-    dataSpec!: DataSpec;
-}
-
 @Entity({ name: "component_info", schema: SCHEMA_NAME })
 @Unique(["name", "packageName"])
 export class ComponentInfoEntity extends BaseEntity {
@@ -146,43 +125,6 @@ export class DataConnectorStatusEntity extends BaseEntity {
     updatedAt!: Date;
 }
 
-@Entity({ name: "data_table_status", schema: SCHEMA_NAME })
-@Unique(["connectorId", "tableName"])
-export class DataTableStatusEntity extends BaseEntity {
-  @PrimaryGeneratedColumn()
-    id!: number;
-
-  @Column({ type: "varchar" })
-    connectorId!: string;
-
-  @Column({ type: "varchar" })
-    tableName!: string;
-
-  @Column({ type: Date, nullable: true })
-    lastSyncedAt!: Date | null;
-
-  @CreateDateColumn()
-    createdAt!: Date;
-
-  @UpdateDateColumn()
-    updatedAt!: Date;
-}
-
-@Entity({ name: "data_spec", schema: SCHEMA_NAME })
-export class DataSpecEntity extends BaseEntity {
-  @PrimaryColumn({ type: "varchar" })
-    projectId!: string;
-
-  @Column({ 
-    type: "text",
-    transformer: {
-      to: (value: any) => JSON.stringify(value),
-      from: (value: string) => JSON.parse(value)
-    }
-  })
-    queries!: any;
-}
-
 @Entity({ name: "data_job", schema: SCHEMA_NAME })
 export class DataJobEntity extends BaseEntity {
   @PrimaryColumn({ type: "varchar" })
@@ -228,12 +170,209 @@ export class DataJobEntity extends BaseEntity {
     updatedAt!: Date;
 }
 
+@Entity({ name: "data_spec", schema: SCHEMA_NAME })
+export class DataSpecEntity extends BaseEntity {
+  @PrimaryColumn({ type: "varchar" })
+    projectId!: string;
+
+  @Column({ 
+    type: "text",
+    transformer: {
+      to: (value: any) => JSON.stringify(value),
+      from: (value: string) => JSON.parse(value)
+    }
+  })
+    queries!: any;
+}
+
+@Entity({ name: "data_table_status", schema: SCHEMA_NAME })
+@Unique(["connectorId", "tableName"])
+export class DataTableStatusEntity extends BaseEntity {
+  @PrimaryGeneratedColumn()
+    id!: number;
+
+  @Column({ type: "varchar" })
+    connectorId!: string;
+
+  @Column({ type: "varchar" })
+    tableName!: string;
+
+  @Column({ type: Date, nullable: true })
+    lastSyncedAt!: Date | null;
+
+  @CreateDateColumn()
+    createdAt!: Date;
+
+  @UpdateDateColumn()
+    updatedAt!: Date;
+}
+
+/**
+ * PulseConfig represents a scheduled report configuration
+ * Users can define multiple pulses with different schedules
+ */
+@Entity({ name: "pulse_config", schema: SCHEMA_NAME })
+export class PulseConfigEntity extends BaseEntity {
+  @PrimaryColumn({ type: "varchar" })
+    id!: string;
+
+  @Column({ type: "varchar" })
+    name!: string;
+
+  @Column({ type: "text" })
+    description!: string;
+
+  @Column({ type: "text" })
+    prompt!: string;
+
+  @Column({ type: "varchar" })
+    cron!: string; // cron expression (e.g., "0 0 * * *" for daily at midnight)
+
+  @Column({ type: "varchar", nullable: true })
+    cronTimezone!: string | null; // IANA timezone for cron scheduling (e.g., "America/New_York")
+
+  @Column({ type: "boolean", default: true })
+    enabled!: boolean;
+
+  @Column({ type: Date, nullable: true })
+    lastRunAt!: Date | null;
+
+  @Column({ type: Date, nullable: true })
+    nextRunAt!: Date | null;
+
+  @CreateDateColumn()
+    createdAt!: Date;
+
+  @UpdateDateColumn()
+    updatedAt!: Date;
+}
+
+/**
+ * PulseConfig type for API usage
+ */
+export type PulseConfig = {
+  id: string;
+  name: string;
+  description: string;
+  prompt: string;
+  cron: string;
+  cronTimezone: string | null;
+  enabled: boolean;
+  lastRunAt: Date | null;
+  nextRunAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+/**
+ * PulseJob represents a single execution of a pulse
+ * Similar to DataJob but for scheduled reports
+ */
+@Entity({ name: "pulse_job", schema: SCHEMA_NAME })
+export class PulseJobEntity extends BaseEntity {
+  @PrimaryColumn({ type: "varchar" })
+    id!: string;
+
+  @Column({ type: "varchar" })
+    pulseConfigId!: string;
+
+  @Column({ type: "varchar", nullable: true })
+    reportBundleId!: string | null;
+
+  @Column({ type: "varchar" })
+    state!: "created" | "running" | "finished";
+
+  @Column({ type: "varchar", nullable: true })
+    result!: "success" | "error" | "canceled" | null;
+
+  @Column({ type: "json", nullable: true })
+    output!: {
+      messages?: Array<{
+        role: string;
+        content: string;
+        [key: string]: any;
+      }>;
+      report?: string;
+      [key: string]: any;
+    } | null;
+
+  @Column({ type: "text", nullable: true })
+    error!: string | null;
+
+  @Column({ type: Date, nullable: true })
+    startedAt!: Date | null;
+
+  @Column({ type: Date, nullable: true })
+    finishedAt!: Date | null;
+
+  @CreateDateColumn()
+    createdAt!: Date;
+
+  @UpdateDateColumn()
+    updatedAt!: Date;
+}
+
+@Entity({ name: "report_bundle", schema: SCHEMA_NAME })
+export class ReportBundleEntity extends BaseEntity {
+  @PrimaryColumn({ type: "varchar" })
+    id!: string;
+
+  @Column({ type: "json" })
+    bundle!: {
+      text: string;
+      dataQueryResults: Array<{
+        name: string;
+        description: string;
+        query: string;
+        records: Record<string, any>[];
+      }>;
+    };
+
+  @CreateDateColumn()
+    createdAt!: Date;
+
+  @UpdateDateColumn()
+    updatedAt!: Date;
+}
+
+@Entity({ name: "ui_bundle", schema: SCHEMA_NAME })
+export class UIBundleEntity extends BaseEntity {
+  @PrimaryColumn({ type: "varchar" })
+    uuid!: string;
+
+  @Column({ type: "varchar" })
+    type!: string;
+
+  @Column({ type: "text" })
+    sourceCode!: string;
+
+  @Column({ type: "text" })
+    compiledCode!: string;
+
+  @Column({ type: "json", nullable: true })
+    sourceMap!: object;
+
+  @Column({ type: "json" })
+    dataSpec!: DataSpec;
+}
+
 export type DataRecord = {
   resourceName: string;
   [key: string]: any;
 };
 
-export const ENTITIES = [UIBundleEntity, ComponentInfoEntity, DataConnectorConfigEntity, DataConnectorStatusEntity, DataTableStatusEntity, DataSpecEntity, DataJobEntity] as const;
+export const ENTITIES = [
+  ComponentInfoEntity,
+  DataConnectorConfigEntity,
+  DataConnectorStatusEntity,
+  DataJobEntity,
+  DataSpecEntity,
+  DataTableStatusEntity,
+  PulseConfigEntity,
+  PulseJobEntity,
+  ReportBundleEntity,
+  UIBundleEntity
+] as const;
 
 // Common database options shared across all user data sources
 const COMMON_DATABASE_OPTIONS = {
@@ -332,4 +471,5 @@ export async function resetUserDataSource(userId: string): Promise<void> {
     await userDataSource.destroy();
   }
   userDataSources.delete(userId);
-} 
+}
+

@@ -4,9 +4,9 @@ import SwaggerParser from "@apidevtools/swagger-parser";
 import { OpenAPIV3 } from "openapi-types";
 import { DataSource } from "typeorm";
 
-import { DataConnectorStatusEntity } from "@/lib/data/entities";
 import { DataLoader } from "@/lib/data/loader";
 import { DataWriter } from "@/lib/data/writer";
+import { DataConnectorStatusEntity } from "@/lib/entities";
 import logger from "@/lib/logger";
 import type { DataConnectorConfig } from "@/lib/types";
 import { mergeAllOfSchemas, createZodSchema } from "@/lib/util/openapi-utils";
@@ -476,7 +476,7 @@ export class DataConnector {
     await statusRepo.delete({ connectorId: this.id });
     
     // Clear all table status records for this connector
-    const { DataTableStatusEntity } = await import("@/lib/data/entities");
+    const { DataTableStatusEntity } = await import("@/lib/entities");
     const tableStatusRepo = this.dataSource.getRepository(DataTableStatusEntity);
     await tableStatusRepo.delete({ connectorId: this.id });
     

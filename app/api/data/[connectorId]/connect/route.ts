@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { DATA_CONNECTOR_URLS } from "@/lib/consts";
 import { DataCatalog } from "@/lib/data/catalog";
 import { DataConnector } from "@/lib/data/connector";
-import { getUserDataSource } from "@/lib/data/entities";
+import { getUserDataSource } from "@/lib/entities";
 import { APIError } from "@/lib/errors";
 import logger from "@/lib/logger";
 import { withAPIErrorHandler, callInternalAPI } from "@/lib/util/api-utils";

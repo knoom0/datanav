@@ -6,7 +6,7 @@ import {
   createMockDataProxy,
 } from "@/components/data-proxy-client";
 import { DataProxyServer } from "@/lib/data/data-proxy";
-import { DataSpecEntity } from "@/lib/data/entities";
+import { DataSpecEntity } from "@/lib/entities";
 import type { DataSpec, ColumnInfo } from "@/lib/types";
 import { setupSQLiteTestDatabase, teardownSQLiteTestDatabase, getSQLiteTestDataSource } from "@/lib/util/test-util";
 

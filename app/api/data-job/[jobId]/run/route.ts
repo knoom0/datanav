@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse, after } from "next/server";
 
 import { DataCatalog } from "@/lib/data/catalog";
-import { getUserDataSource } from "@/lib/data/entities";
 import { DataJobScheduler } from "@/lib/data/job";
+import { getUserDataSource } from "@/lib/entities";
 import logger from "@/lib/logger";
 import { withAPIErrorHandler, callInternalAPI } from "@/lib/util/api-utils";
 

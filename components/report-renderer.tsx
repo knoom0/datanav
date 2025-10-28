@@ -179,6 +179,17 @@ function ChartRenderer({
   language?: string; 
   dataQueryResults?: any[];
 }) {
+  if (language === "summary") {
+    // Render summary as a highlighted section
+    return (
+      <Paper withBorder p="md" mb="md" bg="yellow.0" style={{ borderLeftWidth: 4, borderLeftColor: "var(--mantine-color-yellow-6)" }}>
+        <Text size="sm" style={{ whiteSpace: "pre-wrap" }}>
+          {children}
+        </Text>
+      </Paper>
+    );
+  }
+
   if (language === "chart") {
     // Let JSON parsing errors bubble up to ErrorBoundary
     const chartConfig = JSON.parse(children) as DataChartConfig;
