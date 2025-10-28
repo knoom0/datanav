@@ -3,7 +3,7 @@ import { NextRequest, NextResponse, after } from "next/server";
 import { getUserDataSource } from "@/lib/entities";
 import logger from "@/lib/logger";
 import { PulseJobScheduler } from "@/lib/pulse/job";
-import { withAPIErrorHandler, callInternalAPI } from "@/lib/util/api-utils";
+import { withAPIErrorHandler, callInternalAPI, getBaseUrl } from "@/lib/util/api-utils";
 
 async function handler(
   request: NextRequest,
@@ -15,7 +15,8 @@ async function handler(
   after(async () => {
     // Get data source and create pulse job scheduler
     const dataSource = await getUserDataSource();
-    const jobScheduler = new PulseJobScheduler({ dataSource });
+    const baseUrl = getBaseUrl(request);
+    const jobScheduler = new PulseJobScheduler({ dataSource, baseUrl });
 
     // Run the job
     const result = await jobScheduler.run({ id: jobId });

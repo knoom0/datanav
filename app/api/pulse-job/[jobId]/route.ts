@@ -1,12 +1,12 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 import { getUserDataSource } from "@/lib/entities";
 import { APIError } from "@/lib/errors";
 import { PulseJobScheduler } from "@/lib/pulse/job";
-import { withAPIErrorHandler } from "@/lib/util/api-utils";
+import { withAPIErrorHandler, getBaseUrl } from "@/lib/util/api-utils";
 
 async function handler(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ jobId: string }> }
 ) {
   const { jobId } = await params;
@@ -17,7 +17,8 @@ async function handler(
 
   // Get data source and create pulse job scheduler
   const dataSource = await getUserDataSource();
-  const jobScheduler = new PulseJobScheduler({ dataSource });
+  const baseUrl = getBaseUrl(request);
+  const jobScheduler = new PulseJobScheduler({ dataSource, baseUrl });
 
   // Get the job by ID
   const job = await jobScheduler.get({ id: jobId });

@@ -1,5 +1,5 @@
 import { AxiosError } from "axios";
-import { NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 
 import { APIError } from "@/lib/errors";
 import logger from "@/lib/logger";
@@ -60,6 +60,17 @@ export function withAPIErrorHandler(handler: APIHandler) {
       return handleAPIError(error);
     }
   };
+}
+
+/**
+ * Extracts the base URL from a NextRequest object.
+ * Uses the request's URL to determine the protocol and host.
+ * 
+ * @param request - The NextRequest object
+ * @returns The base URL (e.g., "https://example.com" or "http://localhost:3000")
+ */
+export function getBaseUrl(request: NextRequest): string {
+  return new URL(request.url).origin;
 }
 
 /**

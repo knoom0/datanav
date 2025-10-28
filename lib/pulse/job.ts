@@ -48,9 +48,11 @@ export interface SendEmailParams {
 export class PulseJobScheduler {
   private dataSource: DataSource;
   private maxJobDurationMs: number;
+  private baseUrl?: string;
 
-  constructor(params: { dataSource: DataSource }) {
+  constructor(params: { dataSource: DataSource; baseUrl?: string }) {
     this.dataSource = params.dataSource;
+    this.baseUrl = params.baseUrl;
 
     // Get max duration from config
     const config = getConfig();
@@ -287,7 +289,7 @@ export class PulseJobScheduler {
       // Send email if we have the user's email and a report (before marking job as finished)
       if (userEmail && summary) {
         const reportUrl = reportBundleId 
-          ? `${process.env.NEXT_PUBLIC_URL || "http://localhost:3000"}/report/${reportBundleId}`
+          ? `${this.baseUrl || "http://localhost:3000"}/report/${reportBundleId}`
           : null;
 
         await this.sendEmail({
