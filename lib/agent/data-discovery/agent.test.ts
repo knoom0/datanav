@@ -85,7 +85,7 @@ describeIf(
     for (const schema of schemaNames) {
       try {
         await testDbSetup.dataSource.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
-      } catch (error) {
+      } catch {
         // Ignore errors if schema doesn't exist
       }
     }
