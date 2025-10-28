@@ -13,22 +13,27 @@ async function handler(
 
   // Run all job logic after response is sent
   after(async () => {
-    // Get data source and create pulse job scheduler
-    const dataSource = await getUserDataSource();
-    const baseUrl = getBaseUrl(request);
-    const jobScheduler = new PulseJobScheduler({ dataSource, baseUrl });
+    try {
+      // Get data source and create pulse job scheduler
+      const dataSource = await getUserDataSource();
+      const baseUrl = getBaseUrl(request);
+      const jobScheduler = new PulseJobScheduler({ dataSource, baseUrl });
 
-    // Run the job
-    const result = await jobScheduler.run({ id: jobId });
+      // Run the job (errors are handled internally and stored in job entity)
+      const result = await jobScheduler.run({ id: jobId });
 
-    // Trigger next jobs sequentially if any
-    for (const nextJobId of result.nextJobIds || []) {
-      logger.info(`Triggering next pulse job: ${nextJobId}`);
-      await callInternalAPI({
-        endpoint: `/api/pulse-job/${nextJobId}/run`,
-        request,
-        method: "POST",
-      });
+      // Trigger next jobs sequentially if any
+      for (const nextJobId of result.nextJobIds || []) {
+        logger.info(`Triggering next pulse job: ${nextJobId}`);
+        await callInternalAPI({
+          endpoint: `/api/pulse-job/${nextJobId}/run`,
+          request,
+          method: "POST",
+        });
+      }
+    } catch (error) {
+      // Log any unexpected errors that occur outside of the run method
+      logger.error(`Unexpected error in pulse job execution for ${jobId}: ${error instanceof Error ? error.message : String(error)}`);
     }
   });
 
