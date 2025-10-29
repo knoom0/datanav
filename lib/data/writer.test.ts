@@ -1,8 +1,8 @@
 import { OpenAPIV3 } from "openapi-types";
 import { DataSource } from "typeorm";
 
-import { DataTableStatusEntity } from "@/lib/data/entities";
 import { DataWriter } from "@/lib/data/writer";
+import { DataTableStatusEntity } from "@/lib/entities";
 import {
   setupTestDatabase,
   teardownTestDatabase,

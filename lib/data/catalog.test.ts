@@ -3,7 +3,7 @@ import { vi } from "vitest";
 
 import { DataCatalog } from "@/lib/data/catalog";
 import { DataConnectorConfig } from "@/lib/data/connector";
-import { DataConnectorConfigEntity, DataConnectorStatusEntity } from "@/lib/data/entities";
+import { DataConnectorConfigEntity, DataConnectorStatusEntity } from "@/lib/entities";
 import { setupSQLiteTestDatabase, teardownSQLiteTestDatabase, getSQLiteTestDataSource } from "@/lib/util/test-util";
 
 describe("DataCatalog", () => {

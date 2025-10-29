@@ -1,7 +1,7 @@
 import { DataSource } from "typeorm";
 
-import { DataConnectorStatusEntity, DataJobEntity } from "@/lib/data/entities";
 import { DataJobScheduler, JobState, JobResult, JobType } from "@/lib/data/job";
+import { DataConnectorStatusEntity, DataJobEntity } from "@/lib/entities";
 import { setupTestDatabase, teardownTestDatabase, type TestDatabaseSetup } from "@/lib/util/test-util";
 
 // Mock data connector for testing

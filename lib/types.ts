@@ -83,6 +83,8 @@ export interface TableInfo {
   schema?: string;
   name: string;
   ddl: string;
+  dataConnectorId?: string;
+  lastSyncedAt?: Date | null;
 }
 
 export interface DataSource {

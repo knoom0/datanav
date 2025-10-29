@@ -2,7 +2,7 @@ import { OpenAPIV3 } from "openapi-types";
 import { DataSource } from "typeorm";
 
 import { DatabaseClient } from "@/lib/data/db-client";
-import { DataTableStatusEntity } from "@/lib/data/entities";
+import { DataTableStatusEntity } from "@/lib/entities";
 import logger from "@/lib/logger";
 import type { ResourceConfig } from "@/lib/types";
 

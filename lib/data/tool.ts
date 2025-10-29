@@ -2,18 +2,20 @@ import { z } from "zod/v3";
 
 import { BaseAgentTool } from "@/lib/agent/core/agent";
 import { DataCatalog } from "@/lib/data/catalog";
-import { DataConnectorStatusEntity } from "@/lib/data/entities";
+import { DataJobScheduler, JobState } from "@/lib/data/job";
+import { DataConnectorStatusEntity } from "@/lib/entities";
 import logger from "@/lib/logger";
 import { ActionableError, DataConnectorInfo } from "@/lib/types";
 
 
 // Constants for connection request timing
 const ASK_TO_CONNECT_TIMEOUT_SECONDS = 5 * 60; // 5 minutes
+const LOAD_DATA_TIMEOUT_SECONDS = 10 * 60; // 10 minutes
 const POLLING_INTERVAL_MS = 1000; // 1 second
 
 const DataConnectorToolSchema = z.object({
-  operation: z.enum(["list", "ask_to_connect"]).describe("The operation to perform"),
-  connectorId: z.string().optional().describe("Connector ID (required for ask_to_connect operation)")
+  operation: z.enum(["list", "ask_to_connect", "load_data"]).describe("The operation to perform"),
+  connectorId: z.string().optional().describe("Connector ID (required for ask_to_connect and load_data operations)")
 });
 
 export type DataConnectorToolParams = z.infer<typeof DataConnectorToolSchema>;
@@ -29,11 +31,23 @@ export interface AskToConnectResult {
 }
 
 /**
+ * Result interface for loadData operation
+ */
+export interface LoadDataResult {
+  success: boolean;
+  connectorId: string;
+  jobId: string;
+  message: string;
+  recordsLoaded?: number;
+}
+
+/**
  * Configuration options for DataConnectorTool
  */
 export interface DataConnectorToolConfig {
   dataCatalog: DataCatalog;
   askToConnectTimeoutSeconds?: number;
+  loadDataTimeoutSeconds?: number;
 }
 
 /**
@@ -41,16 +55,28 @@ export interface DataConnectorToolConfig {
  */
 export class DataConnectorTool extends BaseAgentTool {
   readonly name = "data_connector";
-  readonly description = "Can list data connectors with their information and status. Also can ask users to connect to a specific connector.";
+  readonly description = "Can list data connectors with their information and status. Also can ask users to connect to a specific connector and load data from connected connectors.";
   readonly inputSchema = DataConnectorToolSchema;
 
   private dataCatalog: DataCatalog;
+  private jobScheduler: DataJobScheduler;
   private askToConnectTimeoutSeconds: number;
+  private loadDataTimeoutSeconds: number;
 
   constructor(config: DataConnectorToolConfig) {
     super();
     this.dataCatalog = config.dataCatalog;
     this.askToConnectTimeoutSeconds = config.askToConnectTimeoutSeconds ?? ASK_TO_CONNECT_TIMEOUT_SECONDS;
+    this.loadDataTimeoutSeconds = config.loadDataTimeoutSeconds ?? LOAD_DATA_TIMEOUT_SECONDS;
+    
+    // Get dataSource from dataCatalog
+    const dataSource = this.dataCatalog.getDataSource();
+    this.jobScheduler = new DataJobScheduler({
+      dataSource,
+      getDataConnector: async (connectorId: string) => {
+        return await this.dataCatalog.getConnector(connectorId);
+      }
+    });
   }
 
   protected async executeInternal(params: DataConnectorToolParams): Promise<any> {
@@ -65,6 +91,12 @@ export class DataConnectorTool extends BaseAgentTool {
         throw new ActionableError("Connector ID is required for ask_to_connect operation");
       }
       return await this.askToConnect(connectorId);
+      
+    case "load_data":
+      if (!connectorId) {
+        throw new ActionableError("Connector ID is required for load_data operation");
+      }
+      return await this.loadData(connectorId);
             
     default:
       throw new ActionableError(`Unknown operation: ${operation}`);
@@ -172,5 +204,91 @@ export class DataConnectorTool extends BaseAgentTool {
     }
     
     return result;
+  }
+
+  private async loadData(connectorId: string): Promise<LoadDataResult> {
+    // Guard clause: validate connector exists
+    const config = await this.dataCatalog.getConfig(connectorId);
+    if (!config) {
+      throw new ActionableError(`Connector with ID '${connectorId}' not found`);
+    }
+
+    // Guard clause: check if connector is connected
+    const connectorInfo = await this.dataCatalog.getConnectorInfo(connectorId);
+    if (!connectorInfo?.isConnected) {
+      throw new ActionableError(`Connector '${config.name}' is not connected. Please connect first using ask_to_connect operation.`);
+    }
+
+    // Guard clause: check if already loading
+    if (connectorInfo.isLoading) {
+      throw new ActionableError(`Connector '${config.name}' is already loading data. Please wait for the current job to complete.`);
+    }
+
+    logger.info(`Starting data load for connector ${connectorId} (${config.name})`);
+
+    // Create and run the job
+    const jobId = await this.jobScheduler.create({
+      dataConnectorId: connectorId
+    });
+
+    // Start the job (non-blocking)
+    // Note: We don't await this because we want to poll the status instead
+    this.jobScheduler.run({ id: jobId }).catch(err => {
+      logger.error(`Job ${jobId} failed to run: ${err}`);
+    });
+
+    // Poll for job completion
+    const startTime = Date.now();
+    const timeoutMs = this.loadDataTimeoutSeconds * 1000;
+    
+    while (Date.now() - startTime < timeoutMs) {
+      // Wait before checking status
+      await new Promise(resolve => setTimeout(resolve, POLLING_INTERVAL_MS));
+      
+      const job = await this.jobScheduler.get({ id: jobId });
+      
+      if (!job) {
+        throw new ActionableError(`Job ${jobId} not found`);
+      }
+
+      // Check if job is finished
+      if (job.state === JobState.FINISHED) {
+        const duration = Math.round((Date.now() - startTime) / 1000);
+        
+        if (job.result === "success") {
+          const recordsLoaded = job.progress?.updatedRecordCount || 0;
+          logger.info(`Data load completed for ${connectorId} in ${duration}s. Records loaded: ${recordsLoaded}`);
+          
+          return {
+            success: true,
+            connectorId,
+            jobId,
+            message: `Successfully loaded ${recordsLoaded} records from ${config.name} in ${duration} seconds`,
+            recordsLoaded
+          };
+        } else {
+          const errorMsg = job.error || "Unknown error";
+          logger.error(`Data load failed for ${connectorId}: ${errorMsg}`);
+          
+          return {
+            success: false,
+            connectorId,
+            jobId,
+            message: `Failed to load data from ${config.name}: ${errorMsg}`
+          };
+        }
+      }
+    }
+
+    // Timeout case
+    const duration = Math.round((Date.now() - startTime) / 1000);
+    logger.warn(`Data load for ${connectorId} timed out after ${duration}s`);
+    
+    return {
+      success: false,
+      connectorId,
+      jobId,
+      message: `Data load from ${config.name} timed out after ${duration} seconds. The job is still running in the background.`
+    };
   }
 }

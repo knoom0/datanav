@@ -1,12 +1,11 @@
 import { randomUUID } from "crypto";
-import { inspect } from "util";
 
 import { anthropic } from "@ai-sdk/anthropic";
 import { openai } from "@ai-sdk/openai";
 import { LanguageModelV2, ImageModelV2 } from "@ai-sdk/provider";
 import { LangfuseClient } from "@langfuse/client";
 import { startActiveObservation } from "@langfuse/tracing";
-import { type UIMessage, TextUIPart, ReasoningUIPart, type ModelMessage, type UserContent, type Tool, createUIMessageStream, type InferUIMessageChunk, type UIMessageStreamWriter, wrapLanguageModel, extractReasoningMiddleware, defaultSettingsMiddleware } from "ai";
+import { type UIMessage, type ModelMessage, type UserContent, type Tool, createUIMessageStream, type InferUIMessageChunk, type UIMessageStreamWriter, wrapLanguageModel, extractReasoningMiddleware, defaultSettingsMiddleware } from "ai";
 import { z } from "zod/v3";
 
 import { getConfig } from "@/lib/config";
@@ -15,6 +14,24 @@ import { Project, ActionableError } from "@/lib/types";
 import { safeErrorString } from "@/lib/util/log-util";
 
 // Langfuse v4 uses OpenTelemetry integration, no need for explicit client instance
+
+/**
+ * Generates a session context part of the system prompt that includes current date and time information.
+ * This context helps the agent understand the temporal context of the conversation.
+ * 
+ * @returns A formatted string containing session context wrapped in XML tags
+ */
+export function generateSessionContext(): string {
+  const now = new Date();
+  
+  // Get ISO format datetime and timezone
+  const isoDateTime = now.toISOString();
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  
+  return `<session_context>
+Current DateTime: ${isoDateTime} (${timezone})
+</session_context>`;
+}
 
 /**
  * List of model names that have built-in reasoning capabilities
@@ -484,164 +501,6 @@ export async function printAgentStream(stream: any): Promise<void> {
   } finally {
     reader.releaseLock();
   }
-}
-
-/**
- * Utility function to process a stream from EvoAgent.stream and return a UIMessage object.
- * Aggregates continuous same-type parts into a single message part.
- * @param stream The data stream to process
- * @param outputToConsole Optional flag to output parts to console as they are processed
- */
-export async function agentStreamToMessage(stream: any, outputToConsole: boolean = false): Promise<UIMessage> {
-  const parts: UIMessage["parts"] = [];
-  const messageMeta: Partial<UIMessage> = {};
-
-  // Console output helper that handles both strings and objects
-  function writeToConsole(content: string | object) {
-    if (!outputToConsole) return;
-    
-    if (typeof content === "string") {
-      process.stdout.write(content);
-    } else {
-      // Use util.inspect for objects with truncation for long strings
-      const formatted = inspect(content, {
-        depth: 3,
-        maxStringLength: 100,
-        maxArrayLength: 10,
-        colors: false,
-        compact: false,
-        breakLength: 80
-      });
-      process.stdout.write(formatted);
-    }
-  }
-
-  // Type guards for part types
-  function isTextUIPart(part: UIMessage["parts"][number]): part is { type: "text"; text: string } {
-    return part.type === "text";
-  }
-  function isReasoningUIPart(part: UIMessage["parts"][number]): part is ReasoningUIPart {
-    return part.type === "reasoning";
-  }
-
-  // Helper to aggregate same-type parts and handle console output
-  let lastPartType: string | null = null;
-  
-  function outputCompletedPart(part: UIMessage["parts"][number]) {
-    if (!outputToConsole) return;
-    
-    // Add header if switching part types
-    if (lastPartType !== part.type) {
-      if (lastPartType !== null) {
-        writeToConsole("\n");
-      }
-      writeToConsole(`${part.type.charAt(0).toUpperCase() + part.type.slice(1)}:\n`);
-      lastPartType = part.type;
-    }
-    
-    // Output the completed part content
-    if (part.type === "text") {
-      writeToConsole((part as TextUIPart).text);
-    } else if (part.type === "reasoning") {
-      writeToConsole((part as ReasoningUIPart).text);
-    } else if (part.type === "file") {
-      writeToConsole((part as any).url || (part as any).filename || "File");
-    } else if (part.type === "source-url" || part.type === "source-document") {
-      writeToConsole((part as any).url || (part as any).filename || "Source");
-    } else if (part.type.startsWith("tool-")) {
-      writeToConsole(JSON.stringify(part));
-    }
-  }
-  
-  function pushPart(part: UIMessage["parts"][number]) {
-    const isAggregating = parts.length > 0 && parts[parts.length - 1].type === part.type;
-    
-    if (isAggregating) {
-      if (isTextUIPart(part) && isTextUIPart(parts[parts.length - 1])) {
-        const existingPart = parts[parts.length - 1] as TextUIPart;
-        existingPart.text += part.text;
-        // Don"t output during aggregation - wait until part is complete
-        return;
-      }
-      if (isReasoningUIPart(part) && isReasoningUIPart(parts[parts.length - 1])) {
-        const existingPart = parts[parts.length - 1] as ReasoningUIPart;
-        existingPart.text += part.text;
-        // Don"t output during aggregation - wait until part is complete
-        return;
-      }
-      // For other types, just push as new part
-    }
-    
-    // If we have a previous part and we"re switching types, output the completed previous part
-    if (parts.length > 0 && (!isAggregating || part.type !== parts[parts.length - 1].type)) {
-      outputCompletedPart(parts[parts.length - 1]);
-    }
-    
-    // Add the new part
-    parts.push(part);
-    
-    // For non-aggregating types, output immediately since they"re complete
-    if (part.type !== "text" && part.type !== "reasoning") {
-      outputCompletedPart(part);
-    }
-  }
-
-  const reader = stream.getReader();
-  try {
-     
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      // Handle different value types from the stream
-      let stringValue: string;
-      if (typeof value === "string") {
-        stringValue = value;
-      } else if (value instanceof Uint8Array || value instanceof ArrayBuffer) {
-        stringValue = new TextDecoder().decode(value);
-      } else {
-        // Fallback: try to convert to string directly
-        stringValue = String(value);
-      }
-      
-      const lines = stringValue.split("\n").filter((line: string) => line.trim());
-      
-      for (const line of lines) {
-        if (line.startsWith("0:")) {
-          pushPart({ type: "text", text: JSON.parse(line.slice(2)) });
-        } else if (line.startsWith("g:")) {
-          pushPart({ type: "reasoning", text: JSON.parse(line.slice(2)) } as any);
-        } else if (line.startsWith("3:")) {
-          throw JSON.parse(line.slice(2));
-        }
-      }
-    }
-  } finally {
-    reader.releaseLock();
-  }
-
-  // Output the final part if it exists (in case stream ended during aggregation)
-  if (parts.length > 0) {
-    outputCompletedPart(parts[parts.length - 1]);
-    // Add final newline for clean output
-    if (outputToConsole) {
-      writeToConsole("\n");
-    }
-  }
-
-  // Create a content property by aggregating all text from text parts
-  const textParts = parts.filter((part): part is { type: "text"; text: string } => part.type === "text");
-  const content = textParts.map(part => part.text).join("");
-
-  // Compose the UIMessage
-  const uiMessage: UIMessage = {
-    id: messageMeta.id || "",
-    role: messageMeta.role || "assistant",
-    parts,
-    content,
-    // Add any other fields from messageMeta if needed
-  } as UIMessage;
-  return uiMessage;
 }
 
 /**

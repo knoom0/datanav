@@ -46,6 +46,11 @@ export const config = {
     repo: "knoom0/datanav",
   },
 
+  email: {
+    sender: "noreply@datanav.app",
+    senderName: "DataNav"
+  },
+
   hosting: {
     enabled: false,
   },

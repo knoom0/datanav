@@ -1,6 +1,6 @@
 import "reflect-metadata";
 
-import { UIBundleEntity, getUserDataSource } from "@/lib/data/entities";
+import { UIBundleEntity, getUserDataSource } from "@/lib/entities";
 import type { UIBundle } from "@/lib/types";
 
 /**

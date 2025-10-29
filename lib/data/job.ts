@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from "uuid";
 
 import { getConfig } from "@/lib/config";
 import { DataConnector } from "@/lib/data/connector";
-import { DataJobEntity } from "@/lib/data/entities";
+import { DataJobEntity } from "@/lib/entities";
 import logger from "@/lib/logger";
 import { safeErrorString } from "@/lib/util/log-util";
 

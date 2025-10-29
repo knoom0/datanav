@@ -129,7 +129,7 @@ To create a custom data loader:
 ### Example Structure
 
 ```typescript
-import type { DataRecord } from "@/lib/data/entities";
+import type { DataRecord } from "@/lib/entities";
 import { DataLoader } from "@/lib/data/loader";
 
 export class MyCustomLoader implements DataLoader {

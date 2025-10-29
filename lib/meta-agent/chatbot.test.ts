@@ -11,9 +11,9 @@ import {
 
 let sqliteDataSource: DataSource | null = null;
 
-vi.mock("@/lib/data/entities", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/data/entities")>(
-    "@/lib/data/entities"
+vi.mock("@/lib/entities", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/entities")>(
+    "@/lib/entities"
   );
 
   return {

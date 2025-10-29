@@ -3,11 +3,11 @@ import { LanguageModelV2 } from "@ai-sdk/provider";
 import { streamText, ModelMessage, stepCountIs, type UIMessageStreamWriter } from "ai";
 
 import { generateDataProxyInterface } from "@/components/data-proxy-client";
-import { EvoAgentBase, type IterationResult, createToolsMap, type NamedTool, pipeUIMessageStream, getAgentModel, isReasoningModel } from "@/lib/agent/core/agent";
+import { EvoAgentBase, type IterationResult, createToolsMap, type NamedTool, pipeUIMessageStream, getAgentModel, isReasoningModel, generateSessionContext } from "@/lib/agent/core/agent";
 import { ProjectTool } from "@/lib/agent/tool/project-tool";
 import { createTextEditorTool, TextEditorTool } from "@/lib/agent/tool/text-editor";
 import { getConfig } from "@/lib/config";
-import { getUserDataSource } from "@/lib/data/entities";
+import { getUserDataSource } from "@/lib/entities";
 import logger from "@/lib/logger";
 import { Project, Code, DataSpec, Design, PRD, UI_BUNDLE_PART_TYPE } from "@/lib/types";
 import { UICatalogTool } from "@/lib/ui-catalog/ui-catalog";
@@ -24,6 +24,8 @@ const CODE_FILE_NAME = "component.tsx";
 
 function systemMessageTemplate({model, codeFileName}: {model: LanguageModelV2, codeFileName: string}): string {
   return `
+${generateSessionContext()}
+
 You are an AI component developer.
 Your task is to develop a data UI component in ${codeFileName} according to the PRD and the user-provideddesign image.
 Your component can access data defined in the data specification using DataProxy interface.

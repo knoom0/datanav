@@ -9,14 +9,14 @@ import path from "path";
 
 import { LanguageModelV2 } from "@ai-sdk/provider";
 import { Octokit } from "@octokit/rest";
-import { streamText, createUIMessageStream, stepCountIs } from "ai";
+import { streamText, createUIMessageStream, stepCountIs, readUIMessageStream } from "ai";
 import dotenv from "dotenv";
 import { z } from "zod/v3";
 
-import { agentStreamToMessage, BaseAgentTool } from "@/lib/agent/core/agent";
+import { BaseAgentTool } from "@/lib/agent/core/agent";
 import { getConfig } from "@/lib/config";
 import { DEFAULT_QA_MODEL } from "@/lib/consts";
-import { getUserDataSource } from "@/lib/data/entities";
+import { getUserDataSource } from "@/lib/entities";
 import logger from "@/lib/logger";
 import { loadPackageMetadata, extractReactComponents, type ComponentLocator } from "@/lib/ui-catalog/package-util";
 import { ComponentInfoSaveTool, getComponentInfoByName } from "@/lib/ui-catalog/ui-catalog";
@@ -466,8 +466,16 @@ Generate a comprehensive information card to help coding AI use this component.`
     }
   });
 
-  // Use agentStreamToMessage to enable console output and get the final result
-  const result = await agentStreamToMessage(dataStream);
+  // Use readUIMessageStream to get the final result
+  let result = null;
+  const messageStream = readUIMessageStream({ stream: dataStream });
+  for await (const message of messageStream) {
+    result = message;
+  }
+  
+  if (!result) {
+    throw new Error("No message received from stream");
+  }
   
   // Return the raw response directly
   const textParts = result.parts?.filter(part => part.type === "text") || [];

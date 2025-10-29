@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { DataCatalog } from "@/lib/data/catalog";
 import { DataConnectorConfig, validateDataConnectorConfig } from "@/lib/data/connector";
-import { getUserDataSource } from "@/lib/data/entities";
+import { getUserDataSource } from "@/lib/entities";
 import logger from "@/lib/logger";
 import { withAPIErrorHandler } from "@/lib/util/api-utils";
 

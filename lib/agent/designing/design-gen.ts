@@ -5,7 +5,7 @@ import { observeOpenAI } from "@langfuse/openai";
 import { type UIMessageStreamWriter } from "ai";
 import { OpenAI, toFile } from "openai";
 
-import { EvoAgentBase, IterationResult, getAgentModel } from "@/lib/agent/core/agent";
+import { EvoAgentBase, IterationResult, getAgentModel, generateSessionContext } from "@/lib/agent/core/agent";
 import { Project, PRD, ProjectConfig } from "@/lib/types";
 
 /**
@@ -51,6 +51,8 @@ export class CustomUIMessageStreamWriter {
 
 function systemMessageTemplate({projectConfig, prd}: {projectConfig: ProjectConfig, prd: PRD}): string {
   return `
+${generateSessionContext()}
+
     You are a UI/UX designer participating in a UI component development project.
 
     Your task is to create a mock image of a data component based on the PRD requirements for the following target:

@@ -4,11 +4,11 @@
 import * as fs from "fs";
 import * as path from "path";
 
+import { readUIMessageStream } from "ai";
 import { describe, it, expect } from "vitest";
 
-import "@/instrumentation" 
+import "@/instrumentation";
 import { CodeAgent } from "@/lib/agent/coding/code-agent";
-import { agentStreamToMessage } from "@/lib/agent/core/agent";
 import logger from "@/lib/logger";
 import { Project } from "@/lib/types";
 import { DesignAlignmentEval } from "@/lib/ui-kit/ui-eval";
@@ -282,7 +282,12 @@ describe.sequential("CodeAgent eval", () => {
           logToConsole(error);
         }
       });
-      await agentStreamToMessage(stream);
+      // Consume the stream
+      const messageStream = readUIMessageStream({ stream });
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      for await (const _message of messageStream) {
+        // Just consume the stream
+      }
 
       // Get the UI bundle that CodeAgent generated (evaluation assumes success)
       const validUIBundle = project.getUIBundle()!;

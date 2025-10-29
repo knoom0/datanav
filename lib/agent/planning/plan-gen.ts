@@ -1,7 +1,7 @@
 import { LanguageModelV2 } from "@ai-sdk/provider";
 import { streamText, ModelMessage, stepCountIs, type UIMessageStreamWriter } from "ai";
 
-import { EvoAgentBase, type IterationResult, createToolsMap, type NamedTool, pipeUIMessageStream, getAgentModel, isReasoningModel } from "@/lib/agent/core/agent";
+import { EvoAgentBase, type IterationResult, createToolsMap, type NamedTool, pipeUIMessageStream, getAgentModel, isReasoningModel, generateSessionContext } from "@/lib/agent/core/agent";
 import { DatabaseClientTool } from "@/lib/agent/tool/db-client-tool";
 import { ProjectTool } from "@/lib/agent/tool/project-tool";
 import { DEFAULT_MAX_STEP } from "@/lib/consts";
@@ -12,12 +12,11 @@ import { Project, ProductType } from "@/lib/types";
 const MAX_STEPS = DEFAULT_MAX_STEP;
 
 function systemMessageTemplate({productType, model}: {productType: ProductType, model: LanguageModelV2}): string {
-  const currentDateTime = new Date().toISOString().replace("T", " ").slice(0, 19) + " UTC";
   return `
+${generateSessionContext()}
+
   You are an expert product manager specializing in data visualization and UX design.
   When a user presents a question or a prompt, create a PRD for a ${productType} that can satisfy the user's request.
-  
-  Current date and time: ${currentDateTime}
 
   <Instructions>
   1. Think about the user's request and what they expect from the ${productType}.

@@ -2,8 +2,8 @@ import { DataSource } from "typeorm";
 
 import { DataCatalog } from "@/lib/data/catalog";
 import { DataConnectorConfig } from "@/lib/data/connector";
-import { DataConnectorStatusEntity } from "@/lib/data/entities";
-import { DataConnectorTool, type AskToConnectResult } from "@/lib/data/tool";
+import { DataConnectorTool, type AskToConnectResult, type LoadDataResult } from "@/lib/data/tool";
+import { DataConnectorStatusEntity, DataJobEntity } from "@/lib/entities";
 import {
   setupTestDatabase,
   teardownTestDatabase,
@@ -66,8 +66,9 @@ describe("DataConnectorTool", () => {
   });
 
   beforeEach(async () => {
-    // Clear status data before each test
+    // Clear status and job data before each test
     await testDataSource.getRepository(DataConnectorStatusEntity).clear();
+    await testDataSource.getRepository(DataJobEntity).clear();
     
     dataCatalog = new DataCatalog({ 
       dataSource: testDataSource, 
@@ -200,5 +201,129 @@ describe("DataConnectorTool", () => {
       await resultPromise; // Wait for completion
     });
 
+  });
+
+  describe("loadData operation", () => {
+    it("should return error for unknown connector", async () => {
+      const resultJson = await tool.execute({ operation: "load_data", connectorId: "unknown" });
+      const result = JSON.parse(resultJson);
+      
+      expect(result.error).toContain("Connector with ID 'unknown' not found");
+    });
+
+    it("should return error when connector is not connected", async () => {
+      // Ensure connector is not connected
+      await statusRepo.upsert({
+        connectorId: "test_connector",
+        isConnected: false,
+        updatedAt: new Date()
+      }, ["connectorId"]);
+
+      const resultJson = await tool.execute({ 
+        operation: "load_data", 
+        connectorId: "test_connector" 
+      });
+      const result = JSON.parse(resultJson);
+      
+      expect(result.error).toContain("is not connected");
+    });
+
+    it("should return error when connector is already loading", async () => {
+      // Set connector as connected but already loading
+      await statusRepo.upsert({
+        connectorId: "test_connector",
+        isConnected: true,
+        isLoading: true,
+        updatedAt: new Date()
+      }, ["connectorId"]);
+
+      const resultJson = await tool.execute({ 
+        operation: "load_data", 
+        connectorId: "test_connector" 
+      });
+      const result = JSON.parse(resultJson);
+      
+      expect(result.error).toContain("already loading");
+    });
+
+    it("should successfully load data when connector is connected", async () => {
+      // Set connector as connected
+      await statusRepo.upsert({
+        connectorId: "test_connector",
+        isConnected: true,
+        isLoading: false,
+        updatedAt: new Date()
+      }, ["connectorId"]);
+
+      // Start the loadData process
+      const resultPromise = tool.execute({ 
+        operation: "load_data", 
+        connectorId: "test_connector" 
+      });
+
+      // Simulate job completion after a short delay
+      setTimeout(async () => {
+        const jobRepo = testDataSource.getRepository(DataJobEntity);
+        const job = await jobRepo.findOne({ 
+          where: { dataConnectorId: "test_connector" }
+        });
+        
+        if (job) {
+          job.state = "finished";
+          job.result = "success";
+          job.progress = { updatedRecordCount: 42 };
+          job.finishedAt = new Date();
+          await jobRepo.save(job);
+        }
+      }, 500);
+
+      const resultJson = await resultPromise;
+      const result = JSON.parse(resultJson) as LoadDataResult;
+
+      expect(result.success).toBe(true);
+      expect(result.connectorId).toBe("test_connector");
+      expect(result.jobId).toBeDefined();
+      expect(result.message).toContain("Successfully loaded");
+      expect(result.recordsLoaded).toBe(42);
+    }, 10000);
+
+    it("should handle load failure", async () => {
+      // Set connector as connected
+      await statusRepo.upsert({
+        connectorId: "test_connector",
+        isConnected: true,
+        isLoading: false,
+        updatedAt: new Date()
+      }, ["connectorId"]);
+
+      // Start the loadData process
+      const resultPromise = tool.execute({ 
+        operation: "load_data", 
+        connectorId: "test_connector" 
+      });
+
+      // Simulate job failure after a short delay
+      setTimeout(async () => {
+        const jobRepo = testDataSource.getRepository(DataJobEntity);
+        const job = await jobRepo.findOne({ 
+          where: { dataConnectorId: "test_connector" }
+        });
+        
+        if (job) {
+          job.state = "finished";
+          job.result = "error";
+          job.error = "Test error message";
+          job.finishedAt = new Date();
+          await jobRepo.save(job);
+        }
+      }, 500);
+
+      const resultJson = await resultPromise;
+      const result = JSON.parse(resultJson) as LoadDataResult;
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain("Failed to load data");
+      expect(result.message).toContain("Test error message");
+    }, 10000);
   });
 });

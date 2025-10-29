@@ -3,7 +3,7 @@ import "reflect-metadata";
 import _ from "lodash";
 import { DataSource } from "typeorm";
 
-import { DataSpecEntity } from "@/lib/data/entities";
+import { DataSpecEntity } from "@/lib/entities";
 import { DataSpec } from "@/lib/types";
 
 function getProxyMethodName(queryName: string): string {

@@ -1,6 +1,6 @@
 import { DataSource, type DataSourceOptions } from "typeorm";
 
-import { DataConnectorStatusEntity } from "@/lib/data/entities";
+import { DataConnectorStatusEntity } from "@/lib/entities";
 import logger from "@/lib/logger";
 
 /**

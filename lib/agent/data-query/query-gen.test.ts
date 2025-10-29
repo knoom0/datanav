@@ -1,6 +1,5 @@
-import { createUIMessageStream, type UIMessageStreamWriter } from "ai";
+import { createUIMessageStream, type UIMessageStreamWriter, readUIMessageStream } from "ai";
 
-import { agentStreamToMessage } from "@/lib/agent/core/agent";
 import { QueryGen } from "@/lib/agent/data-query/query-gen";
 import { DEFAULT_QA_MODEL } from "@/lib/consts";
 import { DatabaseClient } from "@/lib/data/db-client";
@@ -60,7 +59,12 @@ describeIf(
       }
     });
 
-    await agentStreamToMessage(stream);
+    // Consume the stream
+    const messageStream = readUIMessageStream({ stream });
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    for await (const _message of messageStream) {
+      // Just consume the stream
+    }
 
     expect(error).toBeTruthy();
     expect(error.message).toContain("A project must have a PRD artifact");
@@ -103,7 +107,12 @@ Create a simple user dashboard to display basic user information.
       }
     });
 
-    await agentStreamToMessage(stream);
+    // Consume the stream
+    const messageStream = readUIMessageStream({ stream });
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    for await (const _message of messageStream) {
+      // Just consume the stream
+    }
 
     // Check for errors first
     if (error) {

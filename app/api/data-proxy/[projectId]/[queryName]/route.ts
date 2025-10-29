@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { DataProxyServer } from "@/lib/data/data-proxy";
-import { getUserDataSource } from "@/lib/data/entities";
+import { getUserDataSource } from "@/lib/entities";
 import { APIError } from "@/lib/errors";
 import { withAPIErrorHandler } from "@/lib/util/api-utils";
 

@@ -5,7 +5,7 @@ import { DATA_CONNECTOR_URLS } from "@/lib/consts";
 import { DataConnector, DataLoadResult } from "@/lib/data/connector";
 import gmailConfig from "@/lib/data/connector-config/gmail/config";
 import { DatabaseClient } from "@/lib/data/db-client";
-import { DataConnectorStatusEntity, DataTableStatusEntity } from "@/lib/data/entities";
+import { DataConnectorStatusEntity, DataTableStatusEntity } from "@/lib/entities";
 import {
   describeIf,
   envVarsCondition,

@@ -20,6 +20,10 @@ import { config as rawConfig } from "@/datanav.config";
 export interface Config {
   agent: any;
   database: any;
+  email: {
+    sender: string;
+    senderName: string;
+  };
   github: {
     repo: string;
   };
@@ -46,6 +50,8 @@ function buildConfig(rawConfig: any) {
     DATANAV_DATABASE_DATABASE: "database.database",
     DATANAV_DATABASE_TYPE: "database.type",
     DATANAV_DATABASE_SSL: "database.ssl",
+    DATANAV_EMAIL_SENDER: "email.sender",
+    DATANAV_EMAIL_SENDER_NAME: "email.senderName",
     DATANAV_HOSTING_ENABLED: "hosting.enabled"
   };
   
@@ -71,6 +77,10 @@ function buildConfig(rawConfig: any) {
 let cachedConfig: Config | null = null;
 
 export function getConfig(): Config {
+  // TODO: Add browser environment check to prevent client-side usage
+  // Currently disabled due to test failures. Should be re-enabled after
+  // fixing test mocks to properly handle server-only modules.
+  
   // TODO: Add browser environment check to prevent client-side usage
   // Currently disabled due to test failures. Should be re-enabled after
   // fixing test mocks to properly handle server-only modules.

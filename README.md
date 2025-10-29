@@ -212,6 +212,11 @@ export const config = {
     }
   },
 
+  email: {
+    sender: "noreply@datanav.app",  // Email address for sending Pulse reports
+    senderName: "DataNav"  // Display name for email sender
+  },
+
   hosting: {
     // Hosting configuration (enable multi-user mode)
   },
@@ -252,6 +257,16 @@ Create a `.env.local` file with the following variables:
 | `GOOGLE_CLIENT_ID` | Google OAuth 2.0 Client ID | ✅ Yes | - |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth 2.0 Client Secret | ✅ Yes | - |
 
+#### Email Configuration (for Pulse Reports)
+
+| Variable | Description | Required | Default |
+|----------|-------------|----------|---------|
+| `DATANAV_EMAIL_SENDER` | Email address to send reports from | No | `noreply@datanav.app` |
+| `DATANAV_EMAIL_SENDER_NAME` | Name to display as sender | No | `DataNav` |
+| `AWS_ACCESS_KEY_ID` | AWS access key for SES email service | ✅ Yes (for Pulse) | - |
+| `AWS_SECRET_ACCESS_KEY` | AWS secret key for SES email service | ✅ Yes (for Pulse) | - |
+| `AWS_REGION` | AWS region for SES | No | `us-east-1` |
+
 #### Hosting Configuration
 
 | Variable | Description | Required | Default |
@@ -276,6 +291,13 @@ DATANAV_DATABASE_DATABASE=datanav
 # Google OAuth (for data connectors)
 GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your-client-secret
+
+# Email Configuration (optional - for Pulse scheduled reports)
+# DATANAV_EMAIL_SENDER=noreply@yourdomain.com
+# DATANAV_EMAIL_SENDER_NAME=Your Company Name
+# AWS_ACCESS_KEY_ID=your-aws-access-key
+# AWS_SECRET_ACCESS_KEY=your-aws-secret-key
+# AWS_REGION=us-east-1
 
 # Hosting Mode (optional - set to true for multi-user mode)
 DATANAV_HOSTING_ENABLED=false

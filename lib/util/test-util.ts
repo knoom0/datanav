@@ -1,10 +1,10 @@
 import { PostgreSqlContainer, StartedPostgreSqlContainer } from "@testcontainers/postgresql";
-import { createUIMessageStream, type ModelMessage, type UIMessageStreamWriter } from "ai";
+import { createUIMessageStream, type ModelMessage, type UIMessageStreamWriter, readUIMessageStream } from "ai";
 import { DataSource, type DataSourceOptions } from "typeorm";
 import { describe } from "vitest";
 
-import { agentStreamToMessage, type EvoAgentBase, type IterationResult } from "@/lib/agent/core/agent";
-import { ENTITIES, SCHEMA_NAME } from "@/lib/data/entities";
+import { type EvoAgentBase, type IterationResult } from "@/lib/agent/core/agent";
+import { ENTITIES, SCHEMA_NAME } from "@/lib/entities";
 import { createSchemaIfNotExist } from "@/lib/util/db-util";
 
 export interface TestDatabaseSetup {
@@ -92,7 +92,12 @@ export async function executeAgentIteration(
     }
   });
   
-  await agentStreamToMessage(stream);
+  // Consume the stream
+  const messageStream = readUIMessageStream({ stream });
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  for await (const _message of messageStream) {
+    // Just consume the stream
+  }
   
   if (error) {
     throw error;

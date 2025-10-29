@@ -51,7 +51,7 @@ export default function ChatPage({ params }: ChatPageProps) {
 
   // Set page title when component mounts
   useEffect(() => {
-    setTitle("DataNav");
+    setTitle("Chat");
   }, [setTitle]);
 
   // Show loading state while sessionId is being resolved

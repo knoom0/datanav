@@ -1,7 +1,7 @@
 import { LanguageModelV2 } from "@ai-sdk/provider";
 import { streamText, type ModelMessage, type UIMessageStreamWriter, stepCountIs } from "ai";
 
-import { EvoAgentBase, createToolsMap, IterationResult, pipeUIMessageStream, getAgentModel, isReasoningModel } from "@/lib/agent/core/agent";
+import { EvoAgentBase, createToolsMap, IterationResult, pipeUIMessageStream, getAgentModel, isReasoningModel, generateSessionContext } from "@/lib/agent/core/agent";
 import { DatabaseClientTool } from "@/lib/agent/tool/db-client-tool";
 import { ProjectTool } from "@/lib/agent/tool/project-tool";
 import { DatabaseClient } from "@/lib/data/db-client";
@@ -11,6 +11,8 @@ const MAX_STEPS = 100;
 
 function systemMessageTemplate({model}: {model: LanguageModelV2}): string {
   return `
+${generateSessionContext()}
+
 You are a data analyst participating in a data component development project.
 
 Your task is to generate a data spec containing SQL queries that will satisfy the data requirements in the PRD.

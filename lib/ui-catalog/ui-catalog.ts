@@ -2,7 +2,7 @@ import { DataSource } from "typeorm";
 import { z } from "zod/v3";
 
 import { BaseAgentTool } from "@/lib/agent/core/agent";
-import { ComponentInfoEntity } from "@/lib/data/entities";
+import { ComponentInfoEntity } from "@/lib/entities";
 import { ComponentInfo } from "@/lib/types";
 
 /**
