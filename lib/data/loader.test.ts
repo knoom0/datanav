@@ -5,7 +5,7 @@ import { getAvailableDataLoaders, createDataLoader, SQLDataLoader } from "@/lib/
 describe("getAvailableDataLoaders", () => {
   it("should return array of available loader class names", () => {
     const loaders = getAvailableDataLoaders();
-    expect(loaders).toEqual(["GoogleAPIDataLoader", "SQLDataLoader"]);
+    expect(loaders).toEqual(["GoogleAPIDataLoader", "PlaidDataLoader", "SQLDataLoader"]);
   });
 
   it("should return a copy of the array", () => {
@@ -43,9 +43,10 @@ describe("createDataLoader", () => {
 });
 
 describe("getAvailableDataLoaders edge cases", () => {
-  it("should include GoogleAPIDataLoader and SQLDataLoader", () => {
+  it("should include GoogleAPIDataLoader, PlaidDataLoader, and SQLDataLoader", () => {
     const loaders = getAvailableDataLoaders();
     expect(loaders).toContain("GoogleAPIDataLoader");
+    expect(loaders).toContain("PlaidDataLoader");
     expect(loaders).toContain("SQLDataLoader");
     expect(loaders.length).toBeGreaterThanOrEqual(2);
   });

@@ -288,7 +288,9 @@ export class DataWriter {
       if (schema.properties[customIdColumn]) {
         return customIdColumn;
       }
-      throw new Error(`Custom ID column "${customIdColumn}" not found in schema properties`);
+      // Log available properties to help debug
+      const availableProps = Object.keys(schema.properties).join(", ");
+      throw new Error(`Custom ID column "${customIdColumn}" not found in schema properties. Available properties: ${availableProps}`);
     }
     
     // Look for common ID field names

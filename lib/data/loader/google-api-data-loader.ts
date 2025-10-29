@@ -2,9 +2,9 @@ import SwaggerParser from "@apidevtools/swagger-parser";
 import { google } from "googleapis";
 import { OpenAPIV3 } from "openapi-types";
 
-import { DataLoader, DataLoaderConfig, DataLoaderResourceInfo } from "@/lib/data/loader";
+import { DataLoader, DataLoaderConfig, DataLoaderResourceInfo, DataLoaderTokenPair } from "@/lib/data/loader";
 import logger from "@/lib/logger";
-import { mergeAllOfSchemas } from "@/lib/util/openapi-utils";
+import { getResourceInfoFromOpenAPISpec } from "@/lib/util/openapi-utils";
 
 // Maximum number of days to look back when fetching records on first load with createdAtColumn
 export const MAX_LOOKBACK_DAYS = 365;
@@ -55,20 +55,16 @@ export class GoogleAPIDataLoader implements DataLoader {
     }
   }
 
-  getAccessToken(): string | null {
-    return this.accessToken;
+  getTokenPair(): DataLoaderTokenPair {
+    return {
+      accessToken: this.accessToken,
+      refreshToken: this.refreshToken,
+    };
   }
 
-  getRefreshToken(): string | null {
-    return this.refreshToken;
-  }
-
-  setAccessToken(token: string): void {
-    this.accessToken = token;
-  }
-
-  setRefreshToken(token: string): void {
-    this.refreshToken = token;
+  setTokenPair(tokenPair: DataLoaderTokenPair): void {
+    this.accessToken = tokenPair.accessToken;
+    this.refreshToken = tokenPair.refreshToken || null;
   }
 
   /**
@@ -101,44 +97,20 @@ export class GoogleAPIDataLoader implements DataLoader {
       throw new Error("No OpenAPI spec available. Cannot get resource information.");
     }
 
-    // Parse the OpenAPI spec
-    const api = await SwaggerParser.parse(this.openApiSpec as any) as OpenAPIV3.Document;
-    
-    const schema = api.components?.schemas?.[resourceName] as OpenAPIV3.SchemaObject;
-    if (!schema) {
-      throw new Error(`Schema ${resourceName} not found in OpenAPI spec`);
-    }
-
-    // Merge allOf schemas if present
-    const mergedSchema = mergeAllOfSchemas(schema);
-    
-    // Extract column names from properties
-    const columns: string[] = [];
-    const timestampColumns: string[] = [];
-    
-    if (mergedSchema.properties) {
-      for (const [propName, propSchema] of Object.entries(mergedSchema.properties)) {
-        columns.push(propName);
-        
-        // Check if this is a timestamp field
-        const prop = propSchema as OpenAPIV3.SchemaObject;
-        if (prop.type === "string" && (prop.format === "date-time" || prop.format === "date")) {
-          timestampColumns.push(propName);
-        }
-      }
-    }
+    const resourceInfo = await getResourceInfoFromOpenAPISpec({
+      openApiSpec: this.openApiSpec,
+      resourceName,
+      useDereference: false,
+    });
 
     return {
-      name: resourceName,
-      schema: mergedSchema,
-      columns,
-      timestampColumns,
+      ...resourceInfo,
       // Record count is not available from OpenAPI spec
-      recordCount: undefined
+      recordCount: undefined,
     };
   }
 
-  authenticate({ redirectTo }: { redirectTo: string }): { authUrl: string } {
+  async authenticate({ redirectTo }: { redirectTo: string; userId: string }): Promise<{ authUrl: string }> {
     const clientId = process.env.GOOGLE_CLIENT_ID;
     
     if (!clientId) {

@@ -101,9 +101,8 @@ export class SQLDataLoader implements DataLoader {
    * Tests database connection instead of initiating OAuth flow
    * Returns success indicator for no-auth data loaders
    */
-  authenticate(_params: { redirectTo: string }): { authUrl: string; success?: boolean } {
+  async authenticate(_params: { redirectTo: string; userId: string }): Promise<{ authUrl: string; success?: boolean }> {
     // For SQL loader, we test the connection by attempting to connect
-    // This is synchronous return, but connection test happens in getClient()
     // We return a special marker indicating immediate success
     return { authUrl: "", success: true };
   }
@@ -113,20 +112,6 @@ export class SQLDataLoader implements DataLoader {
    */
   async continueToAuthenticate(_params: { code: string; redirectTo: string }): Promise<void> {
     throw new Error("SQL data loader does not support authentication flow");
-  }
-
-  /**
-   * SQL data loader doesn't use access tokens
-   */
-  getAccessToken(): string | null {
-    return null;
-  }
-
-  /**
-   * SQL data loader doesn't use access tokens
-   */
-  setAccessToken(_token: string): void {
-    // No-op for SQL data loader
   }
 
   /**

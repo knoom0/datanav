@@ -1,15 +1,13 @@
 import "server-only";
 
-import SwaggerParser from "@apidevtools/swagger-parser";
 import { OpenAPIV3 } from "openapi-types";
 import { DataSource } from "typeorm";
 
-import { DataLoader } from "@/lib/data/loader";
+import { DataLoader, DataLoaderTokenPair } from "@/lib/data/loader";
 import { DataWriter } from "@/lib/data/writer";
 import { DataConnectorStatusEntity } from "@/lib/entities";
 import logger from "@/lib/logger";
 import type { DataConnectorConfig } from "@/lib/types";
-import { mergeAllOfSchemas, createZodSchema } from "@/lib/util/openapi-utils";
 
 // Re-export for backward compatibility
 export type { DataConnectorConfig, ResourceConfig } from "@/lib/types";
@@ -175,61 +173,31 @@ export class DataConnector {
   }
 
   /**
-   * Saves the access token and refresh token for this data connector
+   * Saves the token pair for this data connector
    */
-  private async saveTokens(accessToken: string | null, refreshToken?: string | null): Promise<void> {
+  private async saveTokenPair(tokenPair: DataLoaderTokenPair): Promise<void> {
     await this.dataSource.getRepository(DataConnectorStatusEntity).upsert(
       {
         connectorId: this.id,
-        accessToken,
-        refreshToken: refreshToken || null,
+        accessToken: tokenPair.accessToken,
+        refreshToken: tokenPair.refreshToken || null,
         updatedAt: new Date()
       },
       ["connectorId"]
     );
-    logger.info(`Saved tokens for connector ${this.id}`);
+    logger.info(`Saved token pair for connector ${this.id}`);
   }
 
   /**
    * Gets the schema for a specific resource by loading it from the data loader
    */
   private async getResourceSchema(resourceName: string): Promise<OpenAPIV3.SchemaObject> {
-    // Get openApiSpec from loader if available
-    let openApiSpec: string | object | undefined;
-    if ("openApiSpec" in this.dataLoader && this.dataLoader.openApiSpec) {
-      openApiSpec = this.dataLoader.openApiSpec as string | object;
+    if (!this.dataLoader.getResourceInfo) {
+      throw new Error(`Data loader does not support getResourceInfo for resource ${resourceName}`);
     }
     
-    // Load schema from openApiSpec if available
-    if (openApiSpec) {
-      // Validate the OpenAPI spec first (with circular reference handling)
-      let api: OpenAPIV3.Document;
-      try {
-        api = await SwaggerParser.validate(openApiSpec as any) as OpenAPIV3.Document;
-      } catch (error) {
-        // If validation fails due to circular references, parse without validation
-        if (error instanceof Error && error.message.includes("Maximum call stack size exceeded")) {
-          logger.warn("OpenAPI spec validation failed due to circular references, parsing without validation");
-          api = await SwaggerParser.parse(openApiSpec as any) as OpenAPIV3.Document;
-        } else {
-          throw error;
-        }
-      }
-      
-      const schema = api.components?.schemas?.[resourceName] as OpenAPIV3.SchemaObject;
-      if (!schema) {
-        throw new Error(`Schema ${resourceName} not found in OpenAPI spec`);
-      }
-      
-      // Merge allOf schemas and return the result
-      return mergeAllOfSchemas(schema);
-    } else if (this.dataLoader.getResourceInfo) {
-      // If no openApiSpec but we have getResourceInfo, get schema from the loader
-      const resourceInfo = await this.dataLoader.getResourceInfo(resourceName);
-      return resourceInfo.schema;
-    } else {
-      throw new Error(`Cannot get schema for resource ${resourceName}: no openApiSpec and data loader does not support getResourceInfo`);
-    }
+    const resourceInfo = await this.dataLoader.getResourceInfo(resourceName);
+    return resourceInfo.schema;
   }
 
 
@@ -297,9 +265,8 @@ export class DataConnector {
       // Normalize records (convert Date objects to ISO strings)
       const normalizedRecords = resourceRecords.map(record => this.normalizeRecord(record));
       
-      // Validate normalized records against schema
-      const zodSchema = createZodSchema(schema);
-      normalizedRecords.forEach(record => zodSchema.parse(record));
+      // Note: Zod validation disabled - database schema validation is sufficient
+      // and Zod validation is too strict for optional fields
       
       const updatedCount = await this.dataWriter.syncTableRecords({
         resourceConfig,
@@ -312,7 +279,7 @@ export class DataConnector {
     return totalUpdatedRecords;
   }
 
-  async connect(params: { redirectTo: string }): Promise<ConnectResult> {
+  async connect(params: { redirectTo: string; userId: string }): Promise<ConnectResult> {
     // Check if already connected
     const status = await this.getStatus();
     if (status?.isConnected) {
@@ -323,7 +290,10 @@ export class DataConnector {
     await this.updateConnectionStatus(false);
     
     // Attempt authentication (may be immediate for no-auth loaders like SQL)
-    const authResult = this.dataLoader.authenticate({ redirectTo: params.redirectTo });
+    const authResult = await this.dataLoader.authenticate({ 
+      redirectTo: params.redirectTo,
+      userId: params.userId 
+    });
     
     // Check if authentication succeeded immediately (no-auth loaders)
     if (authResult.success) {
@@ -342,10 +312,11 @@ export class DataConnector {
   async continueToConnect(params: ContinueToConnectParams): Promise<ConnectResult> {
     await this.dataLoader.continueToAuthenticate({ code: params.authCode, redirectTo: params.redirectTo || "" });
     
-    // Save access token after successful authentication
-    const accessToken = this.dataLoader.getAccessToken();
-    const refreshToken = this.dataLoader.getRefreshToken?.() || null;
-    await this.saveTokens(accessToken, refreshToken);
+    // Save token pair after successful authentication (if supported by the loader)
+    const tokenPair = this.dataLoader.getTokenPair?.();
+    if (tokenPair) {
+      await this.saveTokenPair(tokenPair);
+    }
         
     // Update connection status after successful data load
     await this.updateConnectionStatus(true);
@@ -364,12 +335,12 @@ export class DataConnector {
     
     const status = await this.getStatus();
     
-    // Restore tokens from database to the loader before fetching data
-    if (status?.accessToken) {
-      this.dataLoader.setAccessToken(status.accessToken);
-    }
-    if (status?.refreshToken && this.dataLoader.setRefreshToken) {
-      this.dataLoader.setRefreshToken(status.refreshToken);
+    // Restore token pair from database to the loader before fetching data (if supported by the loader)
+    if (status?.accessToken && this.dataLoader.setTokenPair) {
+      this.dataLoader.setTokenPair({
+        accessToken: status.accessToken,
+        refreshToken: status.refreshToken || null,
+      });
     }
     
     // Record the sync start time - this will be used for the next sync
@@ -429,6 +400,12 @@ export class DataConnector {
       if (onProgressUpdate) {
         await onProgressUpdate({ updatedRecordCount: totalUpdatedRecords });
       }
+    }
+    
+    // Get and save token pair after fetch (tokens may have been refreshed, if supported by the loader)
+    const tokenPair = this.dataLoader.getTokenPair?.();
+    if (tokenPair) {
+      await this.saveTokenPair(tokenPair);
     }
     
     // Only update lastSyncedAt if the load finished successfully

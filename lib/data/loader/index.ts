@@ -1,5 +1,6 @@
 import { DataLoader, DataLoaderConfig } from "@/lib/data/loader";
 import { GoogleAPIDataLoader } from "@/lib/data/loader/google-api-data-loader";
+import { PlaidDataLoader } from "@/lib/data/loader/plaid-data-loader";
 import { SQLDataLoader } from "@/lib/data/loader/sql-data-loader";
 import { DataLoaderInfo } from "@/lib/types";
 
@@ -17,6 +18,7 @@ type DataLoaderClass = (new (config: DataLoaderConfig) => DataLoader) & {
  */
 const LOADER_CLASS_MAP = new Map<string, DataLoaderClass>([
   ["GoogleAPIDataLoader", GoogleAPIDataLoader],
+  ["PlaidDataLoader", PlaidDataLoader],
   ["SQLDataLoader", SQLDataLoader]
 ]);
 
@@ -64,5 +66,6 @@ export * from "@/lib/data/loader";
 
 // Re-export loader classes for convenience
 export { GoogleAPIDataLoader } from "@/lib/data/loader/google-api-data-loader";
+export { PlaidDataLoader } from "@/lib/data/loader/plaid-data-loader";
 export { SQLDataLoader } from "@/lib/data/loader/sql-data-loader";
 

@@ -81,9 +81,9 @@ describe("GoogleAPIDataLoader", () => {
     vi.mocked(global.fetch).mockRestore();
   });
 
-  it("should generate correct auth URL", () => {
+  it("should generate correct auth URL", async () => {
     const redirectTo = `http://localhost:3000${DATA_CONNECTOR_URLS.AUTH_CALLBACK_PATH}`;
-    const result = loader.authenticate({ redirectTo });
+    const result = await loader.authenticate({ redirectTo, userId: "test-user-id" });
     
     expect(result.authUrl).toContain("https://accounts.google.com/o/oauth2/v2/auth");
     expect(result.authUrl).toContain("client_id=test-client-id");
@@ -91,15 +91,17 @@ describe("GoogleAPIDataLoader", () => {
     expect(result.authUrl).toContain("scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcalendar.readonly");
   });
 
-  it("should throw error when OAuth config is missing", () => {
+  it("should throw error when OAuth config is missing", async () => {
     delete process.env.GOOGLE_CLIENT_ID;
     
-    expect(() => loader.authenticate({ redirectTo: `http://localhost:3000${DATA_CONNECTOR_URLS.AUTH_CALLBACK_PATH}` })).toThrow("Google OAuth configuration missing");
+    await expect(async () => {
+      await loader.authenticate({ redirectTo: `http://localhost:3000${DATA_CONNECTOR_URLS.AUTH_CALLBACK_PATH}`, userId: "test-user-id" });
+    }).rejects.toThrow("Google OAuth configuration missing");
   });
 
   it("should fetch data using AsyncGenerator pattern", async () => {
     // Set up access token
-    loader.setAccessToken("test-access-token");
+    loader.setTokenPair({ accessToken: "test-access-token", refreshToken: null });
 
     const recordGenerator = loader.fetch({ 
       resources: [{ name: "TestEvent" }],
@@ -187,8 +189,13 @@ describe("GoogleAPIDataLoader", () => {
       expect(resourceInfo.recordCount).toBeUndefined();
     });
 
-    it("should throw error when schema not found", async () => {
-      await expect(loaderWithSpec.getResourceInfo("NonExistent")).rejects.toThrow("Schema NonExistent not found in OpenAPI spec");
+    it("should return empty resource info when schema not found", async () => {
+      const resourceInfo = await loaderWithSpec.getResourceInfo("NonExistent");
+      expect(resourceInfo.name).toBe("NonExistent");
+      expect(resourceInfo.columns).toEqual([]);
+      expect(resourceInfo.timestampColumns).toEqual([]);
+      expect(resourceInfo.schema.type).toBe("object");
+      expect(resourceInfo.schema.properties).toEqual({});
     });
 
     it("should handle schemas with allOf", async () => {

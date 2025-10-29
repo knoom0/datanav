@@ -121,10 +121,11 @@ describe("DataCatalog", () => {
       const defaultCatalog = new DataCatalog({ dataSource: testDataSource });
       
       const connectorInfos = await defaultCatalog.getAll();
-      expect(connectorInfos).toHaveLength(3);
+      expect(connectorInfos).toHaveLength(4);
       expect(connectorInfos.map(c => c.id)).toContain("google_calendar");
       expect(connectorInfos.map(c => c.id)).toContain("gmail");
       expect(connectorInfos.map(c => c.id)).toContain("youtube");
+      expect(connectorInfos.map(c => c.id)).toContain("plaid");
     });
   });
 
@@ -215,10 +216,11 @@ describe("DataCatalog", () => {
   describe("getAll", () => {
     it("should return default connector configs", async () => {
       const connectorInfos = await catalog.getAll();
-      expect(connectorInfos).toHaveLength(3);
+      expect(connectorInfos).toHaveLength(4);
       expect(connectorInfos.map(c => c.id)).toContain("google_calendar");
       expect(connectorInfos.map(c => c.id)).toContain("gmail");
       expect(connectorInfos.map(c => c.id)).toContain("youtube");
+      expect(connectorInfos.map(c => c.id)).toContain("plaid");
     });
 
     it("should return all bundled data connector configs", async () => {

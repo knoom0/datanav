@@ -93,7 +93,7 @@ describeIf(
 
   describe("connect", () => {
     it("should return auth info when not connected", async () => {
-      const result = await connector.connect({ redirectTo: `http://localhost:3000${DATA_CONNECTOR_URLS.AUTH_CALLBACK_PATH}` });
+      const result = await connector.connect({ redirectTo: `http://localhost:3000${DATA_CONNECTOR_URLS.AUTH_CALLBACK_PATH}`, userId: "test-user-id" });
       
       expect(result.success).toBe(false);
       expect(result.authInfo).toBeDefined();
@@ -138,7 +138,7 @@ describeIf(
 
       // Set up mock access token for load tests
       const dataLoader = (connector as any).dataLoader;
-      dataLoader.setAccessToken("mock-access-token");
+      dataLoader.setTokenPair({ accessToken: "mock-access-token", refreshToken: null });
 
       // Reset mocks before each test
       vi.clearAllMocks();
@@ -147,7 +147,7 @@ describeIf(
     it("should fail to load data without valid access token", async () => {
       // Clear the access token that was set in beforeEach
       const dataLoader = (connector as any).dataLoader;
-      dataLoader.setAccessToken(null);
+      dataLoader.setTokenPair({ accessToken: null, refreshToken: null });
       
       // This should fail because we don"t have a valid access token
       await expect(connector.load({})).rejects.toThrow("No access token available. Please authenticate first.");
@@ -211,7 +211,7 @@ describeIf(
       
       // Set up mock access token
       const dataLoader = (connector as any).dataLoader;
-      dataLoader.setAccessToken("mock-access-token");
+      dataLoader.setTokenPair({ accessToken: "mock-access-token", refreshToken: null });
       
       // Set connection status to true
       const repo = testDataSource.getRepository(DataConnectorStatusEntity);
