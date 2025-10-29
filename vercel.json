@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/pulse/dispatch-ticks",
-      "schedule": "* * * * *"
+      "schedule": "*/5 * * * *"
     }
   ]
 }
