@@ -1,9 +1,8 @@
 {
   "crons": [
     {
-      "_comment": "TODO: Consider less frequent schedule like */5 * * * * (every 5 minutes) for production to reduce API calls",
       "path": "/api/pulse/dispatch-ticks",
-      "schedule": "* * * * *"
+      "schedule": "*/5 * * * *"
     }
   ]
 }
