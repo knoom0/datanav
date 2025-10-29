@@ -1,0 +1,40 @@
+# Cursor Rules Location
+
+## Description
+
+All Cursor rules must be stored in the `.cursor/rules/` directory as `.mdc` (Markdown) files. Do not create rules in other locations such as `.cursorrules` or any other file.
+
+## Pattern
+
+✅ Do:
+```
+.cursor/
+  rules/
+    - my-rule.mdc
+    - another-rule.mdc
+```
+
+❌ Don't:
+```
+.cursorrules
+.cursor-rules
+cursor-rules.md
+rules/my-rule.md
+```
+
+## File Naming
+
+- Use kebab-case for file names: `my-coding-rule.mdc`
+- Use `.mdc` extension (Markdown Cursor)
+- Be descriptive but concise
+
+## Rationale
+
+- **Consistency**: All rules in one standardized location
+- **Organization**: Easy to find and manage rules
+- **Tool support**: Cursor IDE expects rules in `.cursor/rules/`
+- **Version control**: Rules are tracked with the codebase
+
+## File Pattern
+
+All cursor rule files must be in `.cursor/rules/*.mdc`
