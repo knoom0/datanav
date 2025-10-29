@@ -51,6 +51,13 @@ export class DataCatalog {
   }
 
   /**
+   * Get the underlying DataSource
+   */
+  getDataSource(): DataSource {
+    return this.dataSource;
+  }
+
+  /**
    * Convert a DataConnectorConfigEntity to DataConnectorConfig
    */
   private entityToConfig(entity: DataConnectorConfigEntity): DataConnectorConfig {

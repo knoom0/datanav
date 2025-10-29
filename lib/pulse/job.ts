@@ -405,6 +405,8 @@ export class PulseJobScheduler {
     const { to, subject, htmlContent } = params;
 
     // Validate required environment variables
+    // TODO: Consider using IAM roles or AWS STS for temporary credentials instead of 
+    // storing AWS credentials directly in environment variables for better security
     if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
       throw new Error("AWS credentials not configured. Please set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY");
     }

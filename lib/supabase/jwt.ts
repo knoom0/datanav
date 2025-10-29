@@ -1,6 +1,8 @@
 import "server-only";
 import crypto from "crypto";
 
+import { getConfig } from "@/lib/config";
+
 /**
  * Mint a JWT access token for a user
  * Uses the Supabase JWT secret to create a valid access token
@@ -19,8 +21,9 @@ export function mintUserToken(userId: string): string {
     throw new Error("SUPABASE_JWT_SECRET environment variable is required");
   }
 
+  const config = getConfig();
   const now = Math.floor(Date.now() / 1000);
-  const expiry = now + 3600; // 1 hour from now
+  const expiry = now + config.jwt.expirySeconds;
 
   // Create JWT header
   const header = {

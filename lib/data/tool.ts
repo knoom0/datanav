@@ -69,8 +69,8 @@ export class DataConnectorTool extends BaseAgentTool {
     this.askToConnectTimeoutSeconds = config.askToConnectTimeoutSeconds ?? ASK_TO_CONNECT_TIMEOUT_SECONDS;
     this.loadDataTimeoutSeconds = config.loadDataTimeoutSeconds ?? LOAD_DATA_TIMEOUT_SECONDS;
     
-    // Access dataSource from dataCatalog via private property
-    const dataSource = (this.dataCatalog as any).dataSource;
+    // Get dataSource from dataCatalog
+    const dataSource = this.dataCatalog.getDataSource();
     this.jobScheduler = new DataJobScheduler({
       dataSource,
       getDataConnector: async (connectorId: string) => {

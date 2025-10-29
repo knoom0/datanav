@@ -59,6 +59,10 @@ export const config = {
     maxJobDurationMs: 60000,
   },
 
+  jwt: {
+    expirySeconds: 3600, // 1 hour
+  },
+
   packages: {
     "react": React,
     "@mantine/carousel": MantineCarousel,

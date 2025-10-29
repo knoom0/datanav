@@ -33,6 +33,9 @@ export interface Config {
   job: {
     maxJobDurationMs: number;
   };
+  jwt: {
+    expirySeconds: number;
+  };
   packages: Record<string, any>;
 }
 

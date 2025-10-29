@@ -18,7 +18,7 @@ async function handler(
     const baseUrl = getBaseUrl(request);
     const jobScheduler = new PulseJobScheduler({ dataSource, baseUrl });
 
-    // Run the job (errors are handled internally and stored in the job entity)
+    // Run the job
     const result = await jobScheduler.run({ id: jobId });
 
     // Trigger next jobs sequentially if any

@@ -85,7 +85,7 @@ Your task is to read the project requirements, analyze the data using the provid
 
 <Report Format>
 The report should be in markdown format with the following special notations:
-- Summary: this section summarizes key insights from the report. It should be short, to the point and include the key numbers if possible. It should be placed at the top using the following notation:
+- Summary: this section summarizes key insights from the report. It should be short, to the point and include the key numbers if possible. It should be placed at the top using the following notation (NOTE: This is a custom DataNav notation for internal parsing, not standard markdown):
 
 \`\`\`summary
 - Key Insight 1

@@ -72,7 +72,13 @@ function cronToHumanReadable(cron: string): string {
   // Monthly pattern: [day] * *
   if (dayOfMonth !== "*" && month === "*" && dayOfWeek === "*") {
     const day = parseInt(dayOfMonth, 10);
-    const suffix = day === 1 ? "st" : day === 2 ? "nd" : day === 3 ? "rd" : "th";
+    // Get ordinal suffix (handles 1st, 2nd, 3rd, 21st, 22nd, 23rd, 31st, etc.)
+    const getOrdinalSuffix = (n: number) => {
+      const s = ["th", "st", "nd", "rd"];
+      const v = n % 100;
+      return s[(v - 20) % 10] || s[v] || s[0];
+    };
+    const suffix = getOrdinalSuffix(day);
     return `Monthly on the ${day}${suffix} at ${time}`;
   }
 
