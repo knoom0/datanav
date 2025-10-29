@@ -1,7 +1,8 @@
 import "server-only";
 import crypto from "crypto";
 
-import { getConfig } from "@/lib/config";
+// JWT token expiry time (1 hour)
+const JWT_EXPIRY_SECONDS = 3600;
 
 /**
  * Mint a JWT access token for a user
@@ -21,9 +22,8 @@ export function mintUserToken(userId: string): string {
     throw new Error("SUPABASE_JWT_SECRET environment variable is required");
   }
 
-  const config = getConfig();
   const now = Math.floor(Date.now() / 1000);
-  const expiry = now + config.jwt.expirySeconds;
+  const expiry = now + JWT_EXPIRY_SECONDS;
 
   // Create JWT header
   const header = {
