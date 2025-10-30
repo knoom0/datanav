@@ -486,12 +486,16 @@ export async function getUserDataSource(): Promise<DataSource> {
       userDataSources.delete(userId);
       userDataSourceInitializations.delete(userId);
       throw error;
-    } finally {
-      userDataSourceInitializations.delete(userId);
     }
   })();
 
   userDataSourceInitializations.set(userId, initializationPromise);
+  
+  // Clean up the initialization promise after it completes (success or failure)
+  initializationPromise.finally(() => {
+    userDataSourceInitializations.delete(userId);
+  });
+  
   return initializationPromise;
 }
 

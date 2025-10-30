@@ -57,9 +57,14 @@ export function useDataConnector({
   // Configure Plaid Link
   const { open: openPlaidLink, ready: plaidLinkReady } = usePlaidLink({
     token: plaidLinkToken,
-    onSuccess: (publicToken) => {
-      handleAuthCallback(publicToken);
-      setPlaidLinkToken(null);
+    onSuccess: async (publicToken) => {
+      try {
+        await handleAuthCallback(publicToken);
+      } catch (err) {
+        setError(`Auth callback error: ${err instanceof Error ? err.message : String(err)}`);
+      } finally {
+        setPlaidLinkToken(null);
+      }
     },
     onExit: (error) => {
       if (error) {

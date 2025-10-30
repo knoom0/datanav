@@ -88,12 +88,11 @@ export async function ensureHostingDataSourceInitialized() {
       hostingDataSource = null;
       initializationPromise = null;
       throw error;
-    } finally {
-      initializationPromise = null;
     }
   })();
 
   await initializationPromise;
+  initializationPromise = null;
 }
 
 export async function getHostingDataSource(): Promise<DataSource> {

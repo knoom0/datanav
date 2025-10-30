@@ -191,6 +191,9 @@ export class PlaidDataLoader implements DataLoader {
     
     logger.info("Fetching data from Plaid API");
 
+    // TODO: Refactor to pass access token explicitly to onFetch function instead of using
+    // type assertion to add custom property. This creates tight coupling between loader and config.
+    // Consider creating a wrapper object or passing the token as a parameter to onFetch.
     // Store access token on the plaidClient as a custom property
     // so onFetch can access it when making requests
     (this.plaidClient as any).accessToken = this.accessToken;
