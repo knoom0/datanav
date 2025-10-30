@@ -40,8 +40,8 @@ async function putHandler(req: NextRequest) {
   const dataSource = await getUserDataSource();
   const catalog = new DataCatalog({ dataSource });
   
-  // Add the new connector (ID will be auto-generated in catalog.addNew)
-  await catalog.addNew(config);
+  // Add the new connector (ID will be auto-generated in catalog.create)
+  await catalog.create(config);
 
   logger.info(`Added new data connector: ${config.id}`);
   return NextResponse.json({ success: true, connectorId: config.id });
