@@ -148,7 +148,7 @@ function renderPartContent(part: any) {
   default:
     // Special handling for data_connector ask_to_connect calls
     if (isDataConnectorAskToConnect(part)) {
-      const connectorId = part.state === "input-available" ? part.input.connectorId : "";
+      const connectorId = part.state !== "input-streaming" ? part.input.connectorId : "";
       return (
         <Stack gap="xs">
           <DataConnectButton connectorId={connectorId} />

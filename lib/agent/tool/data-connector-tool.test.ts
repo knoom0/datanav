@@ -1,14 +1,24 @@
 import { DataSource } from "typeorm";
+import { vi } from "vitest";
 
+import { DataConnectorTool, type AskToConnectResult, type LoadDataResult } from "@/lib/agent/tool/data-connector-tool";
 import { DataCatalog } from "@/lib/data/catalog";
 import { DataConnectorConfig } from "@/lib/data/connector";
-import { DataConnectorTool, type AskToConnectResult, type LoadDataResult } from "@/lib/data/tool";
 import { DataConnectorStatusEntity, DataJobEntity } from "@/lib/entities";
 import {
   setupTestDatabase,
   teardownTestDatabase,
   type TestDatabaseSetup
 } from "@/lib/util/test-util";
+
+// Mock callInternalAPI
+vi.mock("@/lib/util/api-utils", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/util/api-utils")>();
+  return {
+    ...actual,
+    callInternalAPI: vi.fn(),
+  };
+});
 
 
 // Mock connector config for testing
@@ -55,6 +65,7 @@ describe("DataConnectorTool", () => {
   let dataCatalog: DataCatalog;
   let tool: DataConnectorTool;
   let statusRepo: any;
+  let mockCallInternalAPI: any;
 
   beforeAll(async () => {
     testDbSetup = await setupTestDatabase();
@@ -76,6 +87,11 @@ describe("DataConnectorTool", () => {
     });
     tool = new DataConnectorTool({ dataCatalog });
     statusRepo = testDataSource.getRepository(DataConnectorStatusEntity);
+    
+    // Get the mocked function
+    const apiUtils = await import("@/lib/util/api-utils");
+    mockCallInternalAPI = apiUtils.callInternalAPI as any;
+    vi.clearAllMocks();
   });
 
   describe("list operation", () => {
@@ -228,23 +244,60 @@ describe("DataConnectorTool", () => {
       expect(result.error).toContain("is not connected");
     });
 
-    it("should return error when connector is already loading", async () => {
-      // Set connector as connected but already loading
+    it("should wait for existing job when connector is already loading", async () => {
+      // Create an existing job
+      const jobRepo = testDataSource.getRepository(DataJobEntity);
+      const existingJob = new DataJobEntity();
+      existingJob.id = "existing-job-123";
+      existingJob.dataConnectorId = "test_connector";
+      existingJob.type = "load";
+      existingJob.state = "running";
+      existingJob.result = null;
+      existingJob.params = {};
+      existingJob.syncContext = null;
+      existingJob.progress = null;
+      existingJob.startedAt = new Date();
+      existingJob.finishedAt = null;
+      await jobRepo.save(existingJob);
+
+      // Set connector as connected and already loading with the existing job
       await statusRepo.upsert({
         connectorId: "test_connector",
         isConnected: true,
         isLoading: true,
+        dataJobId: "existing-job-123",
         updatedAt: new Date()
       }, ["connectorId"]);
 
-      const resultJson = await tool.execute({ 
+      // Mock callInternalAPI (shouldn't be called since we're waiting for existing job)
+      mockCallInternalAPI.mockImplementation(async () => {
+        return { success: false, error: "Should not trigger new job" };
+      });
+
+      // Start waiting for the existing job
+      const resultPromise = tool.execute({ 
         operation: "load_data", 
         connectorId: "test_connector" 
       });
-      const result = JSON.parse(resultJson);
+
+      // Simulate existing job completion after a short delay
+      setTimeout(async () => {
+        existingJob.state = "finished";
+        existingJob.result = "success";
+        existingJob.progress = { updatedRecordCount: 25 };
+        existingJob.finishedAt = new Date();
+        await jobRepo.save(existingJob);
+      }, 500);
+
+      const resultJson = await resultPromise;
+      const result = JSON.parse(resultJson) as LoadDataResult;
       
-      expect(result.error).toContain("already loading");
-    });
+      expect(result.success).toBe(true);
+      expect(result.connectorId).toBe("test_connector");
+      expect(result.jobId).toBe("existing-job-123");
+      expect(result.message).toContain("Successfully loaded");
+      expect(result.recordsLoaded).toBe(25);
+    }, 10000);
 
     it("should successfully load data when connector is connected", async () => {
       // Set connector as connected
@@ -255,6 +308,18 @@ describe("DataConnectorTool", () => {
         updatedAt: new Date()
       }, ["connectorId"]);
 
+      // Mock callInternalAPI to handle the triggerJob API call
+      mockCallInternalAPI.mockImplementation(async ({ endpoint, method }: { endpoint: string; method: string }) => {
+        if (method === "POST" && endpoint.includes("/data-job/") && endpoint.includes("/run")) {
+          // Mock the job trigger API call
+          return {
+            success: true,
+            data: { jobId: endpoint.split("/")[3], status: "accepted" }
+          };
+        }
+        return { success: false, error: "Unexpected call" };
+      });
+
       // Start the loadData process
       const resultPromise = tool.execute({ 
         operation: "load_data", 
@@ -264,11 +329,13 @@ describe("DataConnectorTool", () => {
       // Simulate job completion after a short delay
       setTimeout(async () => {
         const jobRepo = testDataSource.getRepository(DataJobEntity);
-        const job = await jobRepo.findOne({ 
-          where: { dataConnectorId: "test_connector" }
+        const jobs = await jobRepo.find({ 
+          where: { dataConnectorId: "test_connector" },
+          order: { createdAt: "DESC" }
         });
         
-        if (job) {
+        if (jobs.length > 0) {
+          const job = jobs[0];
           job.state = "finished";
           job.result = "success";
           job.progress = { updatedRecordCount: 42 };
@@ -296,6 +363,18 @@ describe("DataConnectorTool", () => {
         updatedAt: new Date()
       }, ["connectorId"]);
 
+      // Mock callInternalAPI to handle the triggerJob API call
+      mockCallInternalAPI.mockImplementation(async ({ endpoint, method }: { endpoint: string; method: string }) => {
+        if (method === "POST" && endpoint.includes("/data-job/") && endpoint.includes("/run")) {
+          // Mock the job trigger API call
+          return {
+            success: true,
+            data: { jobId: endpoint.split("/")[3], status: "accepted" }
+          };
+        }
+        return { success: false, error: "Unexpected call" };
+      });
+
       // Start the loadData process
       const resultPromise = tool.execute({ 
         operation: "load_data", 
@@ -305,11 +384,13 @@ describe("DataConnectorTool", () => {
       // Simulate job failure after a short delay
       setTimeout(async () => {
         const jobRepo = testDataSource.getRepository(DataJobEntity);
-        const job = await jobRepo.findOne({ 
-          where: { dataConnectorId: "test_connector" }
+        const jobs = await jobRepo.find({ 
+          where: { dataConnectorId: "test_connector" },
+          order: { createdAt: "DESC" }
         });
         
-        if (job) {
+        if (jobs.length > 0) {
+          const job = jobs[0];
           job.state = "finished";
           job.result = "error";
           job.error = "Test error message";
@@ -327,3 +408,4 @@ describe("DataConnectorTool", () => {
     }, 10000);
   });
 });
+

@@ -18,7 +18,7 @@ async function handler() {
   });
 
   // Run cleanup
-  const result = await scheduler.cleanup();
+  const result = await scheduler.cleanupJobs();
 
   logger.info(`Job cleanup completed: checked ${result.checkedCount}, canceled ${result.canceledCount}`);
 

@@ -5,7 +5,7 @@ import { DataJobScheduler } from "@/lib/data/job";
 import { getUserDataSource } from "@/lib/entities";
 import { APIError } from "@/lib/errors";
 import logger from "@/lib/logger";
-import { withAPIErrorHandler, callInternalAPI } from "@/lib/util/api-utils";
+import { withAPIErrorHandler } from "@/lib/util/api-utils";
 
 async function handler(
   request: Request,
@@ -40,7 +40,7 @@ async function handler(
     getDataConnector: catalog.getConnector.bind(catalog)
   });
 
-  const jobId = await scheduler.create({
+  const jobId = await scheduler.createJob({
     dataConnectorId: connectorId,
     type: "load"
   });
@@ -57,21 +57,8 @@ async function handler(
   // Use after() to trigger the job after response is sent
   after(async () => {
     try {
-      logger.info(`Triggering job ${jobId} for connector ${connectorId}`);
-      
-      // Trigger the job directly
-      const result = await callInternalAPI({
-        endpoint: `/api/data-job/${jobId}/run`,
-        request,
-        method: "POST",
-      });
-      
-      if (!result.success) {
-        throw new Error(`Job ${jobId} failed: ${result.error}`);
-      }
-      
+      await scheduler.triggerJob({ id: jobId });
       logger.info(`Job ${jobId} triggered successfully`);
-      
     } catch (error) {
       logger.error(`Failed to trigger job ${jobId}: ${error}`);
     }

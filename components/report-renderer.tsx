@@ -82,6 +82,58 @@ function calculateYAxisDomain(records: Record<string, any>[], seriesColumnNames:
   return [minValue, adjustedMaxValue];
 }
 
+/**
+ * Sorts data points by their key column if the keys are numbers or dates.
+ * Returns a sorted copy of the data array.
+ */
+function sortDataByKey(data: Record<string, any>[], keyColumnName: string): Record<string, any>[] {
+  if (data.length === 0) {
+    return data;
+  }
+
+  // Make a copy to avoid mutating the original array
+  const sortedData = [...data];
+
+  // Check if the key column contains dates
+  const firstValue = data[0][keyColumnName];
+  const firstDate = parseDateTime(firstValue);
+
+  if (firstDate) {
+    // Sort by date
+    sortedData.sort((a, b) => {
+      const dateA = parseDateTime(a[keyColumnName]);
+      const dateB = parseDateTime(b[keyColumnName]);
+      
+      if (!dateA || !dateB) return 0;
+      return dateA.getTime() - dateB.getTime();
+    });
+    return sortedData;
+  }
+
+  // Check if the key column contains numbers
+  const firstNumber = Number(firstValue);
+  if (!isNaN(firstNumber) && firstValue !== null && firstValue !== "") {
+    // Verify that most values are numeric (at least 80%)
+    const numericCount = data.filter(record => {
+      const value = record[keyColumnName];
+      return !isNaN(Number(value)) && value !== null && value !== "";
+    }).length;
+    
+    if (numericCount / data.length >= 0.8) {
+      // Sort by number
+      sortedData.sort((a, b) => {
+        const numA = Number(a[keyColumnName]);
+        const numB = Number(b[keyColumnName]);
+        return numA - numB;
+      });
+      return sortedData;
+    }
+  }
+
+  // If neither date nor number, return original order
+  return sortedData;
+}
+
 // Interface definition for pie chart data
 interface PieDataItem {
   name: string;
@@ -221,7 +273,8 @@ function ChartRenderer({
       throw new Error(`Data query result not found for '${queryName}'. Available queries: ${availableQueries}`);
     }
     
-    const chartData = queryResult.records;
+    // Sort data by key column if keys are numbers or dates
+    const chartData = sortDataByKey(queryResult.records, chartConfig.keyColumnName);
 
     // Determine series column names - use provided ones or fallback to first non-key column
     let seriesColumnNames = chartConfig.seriesColumnNames;

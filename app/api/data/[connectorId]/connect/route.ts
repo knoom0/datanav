@@ -27,7 +27,7 @@ async function handler(
   // Get the data source and create catalog
   const dataSource = await getUserDataSource();
   const catalog = new DataCatalog({ dataSource });
-  const connectorConfig = await catalog.getConfig(connectorId);
+  const connectorConfig = await catalog.get(connectorId);
 
   if (!connectorConfig) {
     throw new APIError(`Data connector not found: ${connectorId}`, 404);
