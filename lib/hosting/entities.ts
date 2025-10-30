@@ -32,36 +32,67 @@ export class UserDatabaseConfig extends BaseEntity {
 export const HOSTING_ENTITIES = [UserDatabaseConfig] as const;
 
 let hostingDataSource: DataSource | null = null;
+let initializationPromise: Promise<void> | null = null;
 
 export async function ensureHostingDataSourceInitialized() {
-  // Create DataSource if it doesn't exist
-  if (!hostingDataSource) {
-    const config = getConfig();
-    const hostingDataSourceOptions = { 
-      ...config.database,
-      entities: HOSTING_ENTITIES,
-      synchronize: true,
-    };
-    hostingDataSource = new DataSource(hostingDataSourceOptions);
+  // If initialization is in progress, wait for it
+  if (initializationPromise) {
+    await initializationPromise;
+    return;
   }
-  
-  // Initialize DataSource if it's not initialized
-  if (!hostingDataSource.isInitialized) {
+
+  // If already initialized, return immediately
+  if (hostingDataSource?.isInitialized) {
+    return;
+  }
+
+  // Start initialization
+  initializationPromise = (async () => {
     try {
-      // Ensure the datanav schema exists before initializing with entities
-      const config = getConfig();
-      await createSchemaIfNotExist({
-        dataSourceOptions: config.database,
-        schemaName: SCHEMA_NAME
-      });
+      // Create DataSource if it doesn't exist
+      if (!hostingDataSource) {
+        const config = getConfig();
+        const hostingDataSourceOptions = { 
+          ...config.database,
+          name: "hosting", // Use a unique name instead of "default"
+          entities: HOSTING_ENTITIES,
+          synchronize: true,
+        };
+        hostingDataSource = new DataSource(hostingDataSourceOptions);
+      }
       
-      // Initialize the data source
-      await hostingDataSource.initialize();
+      // Initialize DataSource if it's not initialized
+      if (!hostingDataSource.isInitialized) {
+        // Ensure the datanav schema exists before initializing with entities
+        const config = getConfig();
+        await createSchemaIfNotExist({
+          dataSourceOptions: config.database,
+          schemaName: SCHEMA_NAME
+        });
+        
+        // Initialize the data source
+        await hostingDataSource.initialize();
+        logger.info("Hosting DataSource initialized successfully");
+      }
     } catch (error) {
+      // If it's an "already connected" error, try to recover
+      if (error instanceof Error && error.message.includes("already established")) {
+        logger.warn("Hosting DataSource already connected, recovering existing connection");
+        // Reset and retry
+        hostingDataSource = null;
+        initializationPromise = null;
+        throw error;
+      }
+      
       logger.error(`Hosting DataSource initialization failed: ${safeErrorString(error)}`);
+      hostingDataSource = null;
+      initializationPromise = null;
       throw error;
     }
-  }
+  })();
+
+  await initializationPromise;
+  initializationPromise = null;
 }
 
 export async function getHostingDataSource(): Promise<DataSource> {

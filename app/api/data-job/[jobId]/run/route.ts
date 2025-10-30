@@ -23,7 +23,7 @@ async function handler(
     });
 
     // Run the job (let scheduler handle job ID validation)
-    const result = await scheduler.run({ id: jobId });
+    const result = await scheduler.runJob({ id: jobId });
 
     // Trigger next jobs sequentially
     for (const nextJobId of result.nextJobIds || []) {

@@ -2,21 +2,14 @@
 
 import { Button, Paper, Text, Group, Stack, Badge, Loader, Alert, Menu, Modal, ActionIcon, Code } from "@mantine/core";
 import { IconPlug, IconPlugConnected, IconAlertCircle, IconClock, IconRefresh, IconDots, IconTrash, IconCheck, IconX, IconInfoCircle } from "@tabler/icons-react";
-import { useState, useEffect } from "react";
+import humanNumber from "human-number";
+import humanizeDuration from "humanize-duration";
+import { useState, useEffect, useCallback } from "react";
 
+import { useDataConnector } from "@/hooks/use-data-connector";
 import { DataConnectorInfo, DataJobInfo } from "@/lib/types";
 
-const OAUTH_WINDOW_WIDTH = 500;
-const OAUTH_WINDOW_HEIGHT = 600;
 const JOB_POLLING_INTERVAL_MS = 500;
-
-// Helper function to detect mobile devices
-const isMobileDevice = () => {
-  if (typeof window === "undefined") return false;
-  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-    navigator.userAgent
-  );
-};
 
 interface DataConnectButtonProps {
   connectorId: string;
@@ -32,36 +25,68 @@ export function DataConnectButton({
   onDelete
 }: DataConnectButtonProps) {
   const [connector, setConnector] = useState<DataConnectorInfo | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [disconnectModalOpen, setDisconnectModalOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [errorDetailsModalOpen, setErrorDetailsModalOpen] = useState(false);
   const [jobInfo, setJobInfo] = useState<DataJobInfo | null>(null);
-  
-  // Single loading state for all button actions
   const [isHandlingAction, setIsHandlingAction] = useState(false);
 
-  // Fetch connector information
-  useEffect(() => {
-    const fetchConnectorInfo = async () => {
-      setError(null);
-      
-      const response = await fetch(`/api/data/${connectorId}`);
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        setError(`Failed to load connector: ${errorText}`);
-        return;
+  // Use the data connector hook for all connector operations
+  const {
+    connect,
+    load,
+    disconnect,
+    isConnecting,
+    isLoading,
+    isDisconnecting,
+    error: connectionError,
+    setError: setConnectionError,
+  } = useDataConnector({
+    connectorId,
+    onConnectStart,
+    onConnectComplete: (result) => {
+      onConnectComplete?.(result);
+      // Refresh connector info after successful connection
+      if (result.success) {
+        fetchConnectorInfo();
       }
-      
-      const data = await response.json();
-      setConnector(data);
-    };
+    },
+    onLoadComplete: () => {
+      // Refresh connector info after load
+      fetchConnectorInfo();
+    },
+    onDisconnectComplete: () => {
+      setDisconnectModalOpen(false);
+      // Refresh connector info after disconnect
+      fetchConnectorInfo();
+    },
+  });
 
+  // Combine errors from connection and other operations
+  const error = connectionError;
+  const setError = setConnectionError;
+
+  // Fetch connector information
+  const fetchConnectorInfo = useCallback(async () => {
+    setError(null);
+    
+    const response = await fetch(`/api/data/${connectorId}`);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      setError(`Failed to load connector: ${errorText}`);
+      return;
+    }
+    
+    const data = await response.json();
+    setConnector(data);
+  }, [connectorId, setError]);
+
+  useEffect(() => {
     if (connectorId) {
       fetchConnectorInfo();
     }
-  }, [connectorId]);
+  }, [connectorId, fetchConnectorInfo]);
 
   // Poll connector status when we have an active job
   useEffect(() => {
@@ -108,104 +133,6 @@ export function DataConnectButton({
     return () => clearInterval(interval);
   }, [connector?.dataJobId, connectorId]);
 
-  // Handle OAuth window communication (desktop only)
-  const handleOAuthCallback = async (authCode: string) => {
-    setError(null);
-
-    try {
-      const response = await fetch(`/api/data/${connectorId}/connect`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ authCode }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        setError(`Authentication failed: ${errorText}`);
-        return;
-      }
-
-      await response.json();
-      
-      // Refresh connector info after connection attempt
-      const refreshResponse = await fetch(`/api/data/${connectorId}`);
-      if (refreshResponse.ok) {
-        const refreshedData = await refreshResponse.json();
-        setConnector(refreshedData);
-      }
-    } finally {
-      setIsHandlingAction(false);
-    }
-  };
-
-  // Handle manual load button click
-  const handleLoadData = async () => {
-    if (!connector || isHandlingAction) return;
-
-    setIsHandlingAction(true);
-    setError(null);
-
-    try {
-      const response = await fetch(`/api/data/${connectorId}/load`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        setError(`Load failed: ${errorText}`);
-        return;
-      }
-
-      // Refresh connector info to get updated lastSyncedAt and isLoading state
-      const refreshResponse = await fetch(`/api/data/${connectorId}`);
-      if (refreshResponse.ok) {
-        const refreshedData = await refreshResponse.json();
-        setConnector(refreshedData);
-      }
-    } finally {
-      setIsHandlingAction(false);
-    }
-  };
-
-  // Handle disconnect button click
-  const handleDisconnect = async () => {
-    if (!connector || isHandlingAction) return;
-
-    setIsHandlingAction(true);
-    setError(null);
-
-    try {
-      const response = await fetch(`/api/data/${connectorId}/disconnect`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        setError(`Disconnect failed: ${errorText}`);
-        return;
-      }
-
-      setDisconnectModalOpen(false);
-
-      // Refresh connector info after disconnect
-      const refreshResponse = await fetch(`/api/data/${connectorId}`);
-      if (refreshResponse.ok) {
-        const refreshedData = await refreshResponse.json();
-        setConnector(refreshedData);
-      }
-    } finally {
-      setIsHandlingAction(false);
-    }
-  };
-
   // Handle delete button click
   const handleDelete = async () => {
     if (!connector || isHandlingAction || !connector.isRemovable) return;
@@ -231,103 +158,6 @@ export function DataConnectButton({
 
       // Call onDelete callback to refresh the connector list
       onDelete?.();
-    } finally {
-      setIsHandlingAction(false);
-    }
-  };
-
-  // Handle connect button click
-  const handleConnect = async () => {
-    if (!connector || isHandlingAction) return;
-
-    setIsHandlingAction(true);
-    setError(null);
-
-    // Call onConnectStart callback if provided
-    onConnectStart?.();
-
-    try {
-      const response = await fetch(`/api/data/${connectorId}/connect`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        setError(`Connection failed: ${errorText}`);
-        return;
-      }
-
-      const result = await response.json();
-      
-      // Call onConnectComplete callback if provided
-      onConnectComplete?.(result);
-      
-      // Check if we need to handle OAuth flow
-      if (!result.success && result.authInfo?.authUrl) {
-        // On mobile devices, redirect to auth page instead of opening popup
-        // The auth-callback page will handle completing the connection and redirecting back
-        if (isMobileDevice()) {
-          // Store connector ID and return URL for callback handling
-          sessionStorage.setItem("oauth_connector_id", connectorId);
-          sessionStorage.setItem("oauth_return_url", window.location.href);
-          // Redirect to auth page
-          window.location.href = result.authInfo.authUrl;
-          return;
-        }
-
-        // Desktop: Open OAuth window
-        const authWindow = window.open(
-          result.authInfo.authUrl,
-          "oauth",
-          `width=${OAUTH_WINDOW_WIDTH},height=${OAUTH_WINDOW_HEIGHT},scrollbars=yes,resizable=yes`
-        );
-
-        if (!authWindow) {
-          setError("Failed to open authentication window. Please allow popups for this site.");
-          return;
-        }
-
-        // Listen for OAuth callback
-        const handleMessage = (event: MessageEvent) => {
-          // Verify origin for security
-          if (event.origin !== window.location.origin) return;
-
-          if (event.data.type === "OAUTH_SUCCESS" && event.data.authCode) {
-            window.removeEventListener("message", handleMessage);
-            authWindow.close();
-            handleOAuthCallback(event.data.authCode);
-          } else if (event.data.type === "OAUTH_ERROR") {
-            window.removeEventListener("message", handleMessage);
-            authWindow.close();
-            setError(event.data.error || "Authentication failed");
-            setIsHandlingAction(false);
-          }
-        };
-
-        window.addEventListener("message", handleMessage);
-
-        // Handle window closed without completion
-        const checkClosed = setInterval(() => {
-          if (authWindow.closed) {
-            clearInterval(checkClosed);
-            window.removeEventListener("message", handleMessage);
-            setIsHandlingAction(false);
-          }
-        }, 1000);
-
-        return;
-      }
-
-      // Direct connection success (no OAuth needed)
-      // Refresh connector info after connection attempt
-      const refreshResponse = await fetch(`/api/data/${connectorId}`);
-      if (refreshResponse.ok) {
-        const refreshedData = await refreshResponse.json();
-        setConnector(refreshedData);
-      }
     } finally {
       setIsHandlingAction(false);
     }
@@ -413,26 +243,20 @@ export function DataConnectButton({
     }
   };
 
-  // Format runtime for display
+  // Format runtime using humanize-duration
   const formatRunTime = (runTimeMs: number) => {
-    if (runTimeMs < 1000) {
-      return `${runTimeMs}ms`;
-    } else if (runTimeMs < 60000) {
-      return `${Math.round(runTimeMs / 1000)}s`;
-    } else {
-      const minutes = Math.floor(runTimeMs / 60000);
-      const seconds = Math.round((runTimeMs % 60000) / 1000);
-      return `${minutes}m ${seconds}s`;
-    }
+    return humanizeDuration(runTimeMs, {
+      largest: 2,
+      round: true,
+      units: ["m", "s"],
+    });
   };
 
-  // Format record count for display
+  // Format record count using human-number
   const formatRecordCount = (count: number) => {
     if (count === 0) return "0 records";
     if (count === 1) return "1 record";
-    if (count < 1000) return `${count} records`;
-    if (count < 1000000) return `${Math.round(count / 1000)}k records`;
-    return `${Math.round(count / 1000000)}M records`;
+    return `${humanNumber(count, (n: number) => Number(n.toFixed(1)))} records`;
   };
 
   if (!connector) {
@@ -486,8 +310,8 @@ export function DataConnectButton({
               <Menu.Dropdown>
                 <Menu.Item
                   leftSection={<IconPlug size="0.9rem" />}
-                  onClick={handleConnect}
-                  disabled={connector.isLoading || isHandlingAction}
+                  onClick={connect}
+                  disabled={connector.isLoading || isConnecting || isDisconnecting}
                 >
                   Reconnect
                 </Menu.Item>
@@ -495,7 +319,7 @@ export function DataConnectButton({
                   leftSection={<IconTrash size="0.9rem" />}
                   color="red"
                   onClick={() => setDisconnectModalOpen(true)}
-                  disabled={!connector.isConnected || connector.isLoading || isHandlingAction}
+                  disabled={!connector.isConnected || connector.isLoading || isDisconnecting}
                 >
                   Disconnect
                 </Menu.Item>
@@ -578,9 +402,9 @@ export function DataConnectButton({
         <Group gap="xs" align="center" wrap="nowrap" justify="flex-end">
           {connector.isConnected && (
             <Button
-              onClick={handleLoadData}
-              loading={connector.isLoading || isHandlingAction}
-              disabled={connector.isLoading || isHandlingAction}
+              onClick={load}
+              loading={connector.isLoading || isLoading}
+              disabled={connector.isLoading || isLoading}
               leftSection={<IconRefresh size="1rem" />}
               variant="light"
               size="sm"
@@ -590,9 +414,9 @@ export function DataConnectButton({
           )}
           {!connector.isConnected && (
             <Button
-              onClick={handleConnect}
-              loading={connector.isLoading || isHandlingAction}
-              disabled={connector.isLoading || isHandlingAction}
+              onClick={connect}
+              loading={connector.isLoading || isConnecting}
+              disabled={connector.isLoading || isConnecting}
               leftSection={<IconPlug size="1rem" />}
               variant="filled"
               size="sm"
@@ -625,15 +449,15 @@ export function DataConnectButton({
             <Button
               variant="subtle"
               onClick={() => setDisconnectModalOpen(false)}
-              disabled={connector.isLoading || isHandlingAction}
+              disabled={connector.isLoading || isDisconnecting}
             >
               Cancel
             </Button>
             <Button
               color="red"
-              onClick={handleDisconnect}
-              loading={connector.isLoading || isHandlingAction}
-              disabled={connector.isLoading || isHandlingAction}
+              onClick={disconnect}
+              loading={connector.isLoading || isDisconnecting}
+              disabled={connector.isLoading || isDisconnecting}
               leftSection={<IconTrash size="1rem" />}
             >
               Disconnect & Clear Data

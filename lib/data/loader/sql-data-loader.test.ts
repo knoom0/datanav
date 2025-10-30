@@ -44,8 +44,8 @@ describe("SQLDataLoader", () => {
   });
 
   describe("authenticate", () => {
-    it("should return success for no-auth SQL loader", () => {
-      const result = loader.authenticate({ redirectTo: "http://localhost" });
+    it("should return success for no-auth SQL loader", async () => {
+      const result = await loader.authenticate({ redirectTo: "http://localhost", userId: "test-user-id" });
       expect(result.success).toBe(true);
       expect(result.authUrl).toBe("");
     });
@@ -56,18 +56,6 @@ describe("SQLDataLoader", () => {
       await expect(
         loader.continueToAuthenticate({ code: "code", redirectTo: "http://localhost" })
       ).rejects.toThrow("SQL data loader does not support authentication flow");
-    });
-  });
-
-  describe("getAccessToken", () => {
-    it("should return null", () => {
-      expect(loader.getAccessToken()).toBeNull();
-    });
-  });
-
-  describe("setAccessToken", () => {
-    it("should be a no-op", () => {
-      expect(() => loader.setAccessToken("token")).not.toThrow();
     });
   });
 

@@ -1,5 +1,9 @@
+import SwaggerParser from "@apidevtools/swagger-parser";
 import { OpenAPIV3 } from "openapi-types";
 import { z } from "zod/v3";
+
+import logger from "@/lib/logger";
+import type { DataLoaderResourceInfo } from "@/lib/types";
 
 /**
  * Merges properties from all schemas in an allOf array
@@ -103,4 +107,90 @@ export function createZodSchema(schema: OpenAPIV3.SchemaObject, visited: WeakSet
   visited.delete(schema);
   
   return result;
+}
+
+/**
+ * Extracts resource information from an OpenAPI specification
+ * @param openApiSpec - The OpenAPI specification (can be JSON or object)
+ * @param resourceName - The name of the resource/schema to extract
+ * @param options - Optional configuration
+ * @returns Resource information including schema, columns, and timestamp columns
+ */
+export async function getResourceInfoFromOpenAPISpec(params: {
+  openApiSpec: any;
+  resourceName: string;
+  useDereference?: boolean;
+}): Promise<DataLoaderResourceInfo> {
+  const { openApiSpec, resourceName, useDereference = false } = params;
+
+  // Parse or dereference the OpenAPI spec
+  let spec: OpenAPIV3.Document;
+  
+  if (useDereference) {
+    try {
+      spec = (await SwaggerParser.dereference(openApiSpec)) as OpenAPIV3.Document;
+    } catch {
+      logger.warn(
+        "OpenAPI spec dereferencing failed due to circular references, parsing without dereferencing"
+      );
+      spec = (await SwaggerParser.parse(openApiSpec)) as OpenAPIV3.Document;
+    }
+  } else {
+    spec = (await SwaggerParser.parse(openApiSpec)) as OpenAPIV3.Document;
+  }
+
+  // Find the schema for the resource in components/schemas
+  const schemas = spec.components?.schemas || {};
+  let schema = schemas[resourceName] as OpenAPIV3.SchemaObject | undefined;
+
+  // If not found by exact name, try to find by title
+  if (!schema) {
+    for (const [schemaKey, schemaObj] of Object.entries(schemas)) {
+      const schemaObject = schemaObj as OpenAPIV3.SchemaObject;
+      if (schemaObject.title === resourceName) {
+        logger.info(`Found schema for resource ${resourceName} by title (schema key: ${schemaKey})`);
+        schema = schemaObject;
+        break;
+      }
+    }
+  }
+
+  if (!schema) {
+    logger.warn(`Schema not found for resource: ${resourceName}`);
+    return {
+      name: resourceName,
+      schema: {
+        type: "object",
+        properties: {},
+      },
+      columns: [],
+      timestampColumns: [],
+    };
+  }
+
+  // Handle allOf merging
+  if (schema.allOf) {
+    schema = mergeAllOfSchemas(schema);
+  }
+
+  // Extract column names from schema properties
+  const columns = schema.properties ? Object.keys(schema.properties) : [];
+
+  // Identify timestamp columns based on common patterns
+  const timestampColumns = columns.filter((col) => {
+    const prop = schema.properties?.[col] as OpenAPIV3.SchemaObject;
+    return (
+      col.toLowerCase().includes("date") ||
+      col.toLowerCase().includes("time") ||
+      prop?.format === "date" ||
+      prop?.format === "date-time"
+    );
+  });
+
+  return {
+    name: resourceName,
+    schema,
+    columns,
+    timestampColumns,
+  };
 }

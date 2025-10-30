@@ -388,15 +388,4 @@ export class DataCatalog {
       updatedAt: job.updatedAt,
     };
   }
-
-  // Legacy method aliases for backward compatibility
-  /** @deprecated Use create() instead */
-  async addNew(config: DataConnectorConfig): Promise<void> {
-    return this.create(config);
-  }
-
-  /** @deprecated Use get() instead */
-  async getConfig(id: string): Promise<DataConnectorConfig | null> {
-    return this.get(id);
-  }
 }

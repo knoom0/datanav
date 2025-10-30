@@ -382,6 +382,8 @@ const COMMON_DATABASE_OPTIONS = {
 
 // Cache for user-specific data sources
 const userDataSources = new Map<string, DataSource>();
+// Track initialization promises to prevent concurrent initialization
+const userDataSourceInitializations = new Map<string, Promise<DataSource>>();
 
 /**
  * Create full-text search indexes for component_info table for a specific user data source
@@ -422,42 +424,79 @@ export async function getUserDataSource(): Promise<DataSource> {
   // Get current user ID from Supabase authentication
   const userId = await getCurrentUserId();
   
-  // Get existing user-specific data source
-  let userDataSource = userDataSources.get(userId);
-  
-  // Create DataSource if it doesn't exist
-  if (!userDataSource) {
-    // Get user data source options (this will create the database if it doesn't exist)
-    const baseDataSourceOptions = await getUserDataSourceOptions(userId);    
-    // Merge with common database options that include entities and other settings
-    const dataSourceOptions: DataSourceOptions = {
-      ...COMMON_DATABASE_OPTIONS,
-      ...baseDataSourceOptions,
-    };
-
-    userDataSource = new DataSource(dataSourceOptions);
-    userDataSources.set(userId, userDataSource);
+  // If initialization is in progress, wait for it
+  const existingInitialization = userDataSourceInitializations.get(userId);
+  if (existingInitialization) {
+    return existingInitialization;
   }
-  
-  // Initialize DataSource if it's not initialized
-  if (!userDataSource.isInitialized) {
+
+  // If already initialized, return immediately
+  const existingDataSource = userDataSources.get(userId);
+  if (existingDataSource?.isInitialized) {
+    return existingDataSource;
+  }
+
+  // Start initialization
+  const initializationPromise = (async () => {
     try {
-      // Ensure the datanav schema exists before initializing with entities
-      await createSchemaIfNotExist({
-        dataSourceOptions: userDataSource.options,
-        schemaName: SCHEMA_NAME
-      });
+      // Get existing user-specific data source
+      let userDataSource = userDataSources.get(userId);
       
-      await userDataSource.initialize();      
-      // Create full-text search indexes for the user's database
-      await createFullTextSearchIndexesForUser(userDataSource);
+      // Create DataSource if it doesn't exist
+      if (!userDataSource) {
+        // Get user data source options (this will create the database if it doesn't exist)
+        const baseDataSourceOptions = await getUserDataSourceOptions(userId);    
+        // Merge with common database options that include entities and other settings
+        const dataSourceOptions: DataSourceOptions = {
+          ...COMMON_DATABASE_OPTIONS,
+          ...baseDataSourceOptions,
+        };
+
+        userDataSource = new DataSource(dataSourceOptions);
+        userDataSources.set(userId, userDataSource);
+      }
+      
+      // Initialize DataSource if it's not initialized
+      if (!userDataSource.isInitialized) {
+        // Ensure the datanav schema exists before initializing with entities
+        await createSchemaIfNotExist({
+          dataSourceOptions: userDataSource.options,
+          schemaName: SCHEMA_NAME
+        });
+        
+        await userDataSource.initialize();
+        logger.info(`User data source initialized successfully for user ${userId}`);
+        
+        // Create full-text search indexes for the user's database
+        await createFullTextSearchIndexesForUser(userDataSource);
+      }
+      
+      return userDataSource;
     } catch (error) {
+      // If it's an "already connected" error, try to recover
+      if (error instanceof Error && error.message.includes("already established")) {
+        logger.warn(`User data source already connected for user ${userId}, recovering existing connection`);
+        // Reset and retry
+        userDataSources.delete(userId);
+        userDataSourceInitializations.delete(userId);
+        throw error;
+      }
+      
       logger.error(`User data source initialization failed for user ${userId}: ${safeErrorString(error)}`);
+      userDataSources.delete(userId);
+      userDataSourceInitializations.delete(userId);
       throw error;
     }
-  }
+  })();
+
+  userDataSourceInitializations.set(userId, initializationPromise);
   
-  return userDataSource;
+  // Clean up the initialization promise after it completes (success or failure)
+  initializationPromise.finally(() => {
+    userDataSourceInitializations.delete(userId);
+  });
+  
+  return initializationPromise;
 }
 
 /**
@@ -471,5 +510,6 @@ export async function resetUserDataSource(userId: string): Promise<void> {
     await userDataSource.destroy();
   }
   userDataSources.delete(userId);
+  userDataSourceInitializations.delete(userId);
 }
 

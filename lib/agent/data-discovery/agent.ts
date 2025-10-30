@@ -2,10 +2,10 @@ import { LanguageModelV2 } from "@ai-sdk/provider";
 import { streamText, ModelMessage, stepCountIs, type UIMessageStreamWriter } from "ai";
 
 import { createToolsMap, EvoAgentBase, getAgentModel, NextActionTool, pipeUIMessageStream, type NamedTool, type IterationResult, isReasoningModel, generateSessionContext } from "@/lib/agent/core/agent";
+import { DataConnectorTool } from "@/lib/agent/tool/data-connector-tool";
 import { DatabaseClientTool } from "@/lib/agent/tool/db-client-tool";
 import { DataCatalog } from "@/lib/data/catalog";
 import { DatabaseClient } from "@/lib/data/db-client";
-import { DataConnectorTool } from "@/lib/data/tool";
 import { Project } from "@/lib/types";
 
 const MAX_ITERATIONS = 3;
@@ -21,28 +21,27 @@ Your workflow has two possible outcomes:
 - PROCEED: Data is available and ready to use
 - STOP: Cannot fulfill the request
 
-1. Check existing database tables using ${DatabaseClientTool.name}
-   - If data exists and was updated within the last hour → Call ${NextActionTool.name} with action "proceed"
-   - If data exists but is stale (updated more than an hour ago) → Note the data_connector_id and go to step 3
-   - If no suitable data exists → Go to step 2
+1. Check available data connectors using ${DataConnectorTool.name}
+   - If no suitable connector exists → Go to step 3 to check existing database tables
+   - If suitable connector exists → Go to step 2
 
-2. Check available data connectors using ${DataConnectorTool.name}
-   - If no suitable connector exists → Explain to user and call ${NextActionTool.name} with action "stop"
-   - If suitable connector exists → Go to step 3
-
-3. Connect or load data using ${DataConnectorTool.name}
+2. Connect or load data using ${DataConnectorTool.name}
    - If connector is not connected → Use "ask_to_connect" operation (this tool automatically asks user permission)
-   - If user declines connection → Call ${NextActionTool.name} with action "stop"
+   - If user declines connection → Go to step 3 to check existing database tables
    - If connector is connected (or user just connected) → Use "load_data" operation
    - If data loads successfully → Call ${NextActionTool.name} with action "proceed"
    - If data load fails → Explain failure and call ${NextActionTool.name} with action "stop"
+
+3. Check existing database tables using ${DatabaseClientTool.name}
+   - If data exists and was updated within the last hour → Call ${NextActionTool.name} with action "proceed"
+   - If no suitable data exists → Explain to user and call ${NextActionTool.name} with action "stop"
 
 IMPORTANT: You MUST call ${NextActionTool.name} at the end to indicate whether to proceed or stop.
 </Instructions>
 
 <Notes>
 ${isReasoningModel(model) ? "" : "- Think step by step. Wrap your thinking in <reasoning> tags."}
-- Always check the database first before considering remote data sources
+- Always check available data connectors first, then fall back to checking existing database tables if needed
 - Focus on data discovery and connection decisions rather than trying to answer the user's actual request
 - When querying database, double-quote schema, table, and column names (e.g. SELECT "column_name" FROM "schema"."table_name")
 - After connecting to a data connector, you MUST load the data using "load_data" operation before proceeding

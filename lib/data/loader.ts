@@ -10,15 +10,23 @@ type DataRecord = {
 export type { DataLoaderResourceInfo };
 
 /**
+ * Represents a pair of access and refresh tokens
+ */
+export interface DataLoaderTokenPair {
+  accessToken: string | null;
+  refreshToken?: string | null;
+}
+
+/**
  * Pure interface for data loaders focused only on remote data fetching
  */
 export interface DataLoader {
   /**
    * Initiates the authentication process (or immediate success for no-auth loaders)
-   * @param params - Authentication parameters including the redirect URI
+   * @param params - Authentication parameters including the redirect URI and user ID
    * @returns Authentication information including auth URL, or success flag for no-auth loaders
    */
-  authenticate(params: { redirectTo: string }): { authUrl: string; success?: boolean };
+  authenticate(params: { redirectTo: string; userId: string }): Promise<{ authUrl: string; success?: boolean }>;
 
   /**
    * Continues the authentication process with an authorization code
@@ -27,28 +35,16 @@ export interface DataLoader {
   continueToAuthenticate(params: { code: string; redirectTo: string }): Promise<void>;
 
   /**
-   * Gets the current access token
-   * @returns The access token or null if not authenticated
+   * Gets the current token pair (access token and optional refresh token)
+   * @returns The token pair or null values if not authenticated
    */
-  getAccessToken(): string | null;
+  getTokenPair?(): DataLoaderTokenPair;
 
   /**
-   * Sets the access token
-   * @param token - The access token to set
+   * Sets the token pair (access token and optional refresh token)
+   * @param tokenPair - The token pair to set
    */
-  setAccessToken(token: string): void;
-
-  /**
-   * Gets the current refresh token (if available)
-   * @returns The refresh token or null if not available
-   */
-  getRefreshToken?(): string | null;
-
-  /**
-   * Sets the refresh token (if supported)
-   * @param token - The refresh token to set
-   */
-  setRefreshToken?(token: string): void;
+  setTokenPair?(tokenPair: DataLoaderTokenPair): void;
 
   /**
    * Gets detailed information about a specific resource including schema, columns, and optional record count

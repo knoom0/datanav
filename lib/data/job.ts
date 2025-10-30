@@ -119,7 +119,7 @@ export class DataJobScheduler {
    * @param params - Job creation parameters
    * @returns ID of the newly created job
    */
-  async create(params: CreateJobParams): Promise<string> {
+  async createJob(params: CreateJobParams): Promise<string> {
     const { dataConnectorId, type = JobType.LOAD, params: jobParams = {} } = params;
     
     logger.info(`Creating new job for connector ${dataConnectorId} with type ${type}`);
@@ -165,11 +165,59 @@ export class DataJobScheduler {
   }
 
   /**
+   * Triggers a data job to run via the API
+   * Asserts that the job is in CREATED state before triggering
+   * Changes job state to RUNNING only after successful API call
+   * @param params.id - Job ID to trigger
+   * @returns The triggered job entity
+   */
+  async triggerJob(params: { id: string }): Promise<DataJobEntity> {
+    const { id } = params;
+    
+    const jobRepo = this.dataSource.getRepository(DataJobEntity);
+    const job = await jobRepo.findOne({ where: { id } });
+    
+    if (!job) {
+      throw new Error(`Job ${id} not found`);
+    }
+    
+    // Assert job is in CREATED state
+    if (job.state !== JobState.CREATED) {
+      throw new Error(`Job ${id} must be in CREATED state to trigger, but is in ${job.state} state`);
+    }
+    
+    logger.info(`Triggering job ${id} via API`);
+    
+    // Import and call the API to trigger the job
+    const { callInternalAPI } = await import("@/lib/util/api-utils");
+    const result = await callInternalAPI({
+      endpoint: `/api/data-job/${id}/run`,
+      method: "POST"
+    });
+    
+    if (!result.success) {
+      throw new Error(`Failed to trigger job ${id}: ${result.error}`);
+    }
+    
+    // Update job state to RUNNING after successful API call
+    job.state = JobState.RUNNING;
+    job.startedAt = new Date();
+    await jobRepo.save(job);
+    
+    logger.info(`Job ${id} triggered successfully and marked as RUNNING`);
+    
+    return job;
+  }
+
+  /**
    * Runs a data job by ID
    * @param params.id - Job ID to run (string)
    * @returns Updated job entity and list of job IDs to run next
+   * 
+   * TODO: Add parallel execution protection to prevent multiple simultaneous executions of the same job.
+   * Consider using database-level locking or an atomic state transition check before execution.
    */
-  async run(params: { id: string }): Promise<RunJobResult> {
+  async runJob(params: { id: string }): Promise<RunJobResult> {
     const { id } = params;
     logger.info(`Running job ${id} with max duration ${this.maxJobDurationMs}ms`);
     
@@ -184,14 +232,16 @@ export class DataJobScheduler {
       throw new Error(`Job ${id} is already finished with result: ${job.result}`);
     }
     
-    // Set started time if not already set
+    // Set started time if not already set (handles direct runJob calls without triggerJob)
     if (!job.startedAt) {
       job.startedAt = new Date();
     }
     
-    // Update job state to running
-    job.state = JobState.RUNNING;
-    await jobRepo.save(job);
+    // Update job state to running if not already (handles CREATED state for direct runJob calls)
+    if (job.state !== JobState.RUNNING) {
+      job.state = JobState.RUNNING;
+      await jobRepo.save(job);
+    }
     
     const nextJobIds: string[] = [];
     
@@ -310,7 +360,7 @@ export class DataJobScheduler {
    * @param params.id - Job ID (string)
    * @returns Job entity or null if not found
    */
-  async get(params: { id: string }): Promise<DataJobEntity | null> {
+  async getJob(params: { id: string }): Promise<DataJobEntity | null> {
     const { id } = params;
     return this.dataSource.getRepository(DataJobEntity).findOne({ where: { id } });
   }
@@ -320,7 +370,7 @@ export class DataJobScheduler {
    * @param params.dataConnectorId - Data connector ID
    * @returns Array of job entities
    */
-  async getByConnector(params: { dataConnectorId: string }): Promise<DataJobEntity[]> {
+  async getJobsByConnector(params: { dataConnectorId: string }): Promise<DataJobEntity[]> {
     const { dataConnectorId } = params;
     return this.dataSource.getRepository(DataJobEntity).find({ 
       where: { dataConnectorId },
@@ -329,11 +379,49 @@ export class DataJobScheduler {
   }
 
   /**
+   * Waits for a job to complete by polling its status
+   * @param params.id - Job ID to wait for
+   * @param params.timeoutMs - Maximum time to wait in milliseconds
+   * @param params.pollingIntervalMs - Polling interval in milliseconds (default: 1000)
+   * @returns Object containing job entity, success flag, and duration in milliseconds
+   * @throws Error if job is not found
+   */
+  async waitForJobCompletion(params: { 
+    id: string; 
+    timeoutMs: number;
+    pollingIntervalMs?: number;
+  }): Promise<{ job: DataJobEntity; success: boolean; durationMs: number }> {
+    const { id, timeoutMs, pollingIntervalMs = 1000 } = params;
+    const startTime = Date.now();
+    
+    while (Date.now() - startTime < timeoutMs) {
+      await new Promise(resolve => setTimeout(resolve, pollingIntervalMs));
+      
+      const job = await this.getJob({ id });
+      if (!job) {
+        throw new Error(`Job ${id} not found`);
+      }
+
+      // Return job if finished
+      if (job.state === JobState.FINISHED) {
+        return { job, success: true, durationMs: Date.now() - startTime };
+      }
+    }
+
+    // Timeout - get final job state
+    const job = await this.getJob({ id });
+    if (!job) {
+      throw new Error(`Job ${id} not found`);
+    }
+    return { job, success: false, durationMs: Date.now() - startTime };
+  }
+
+  /**
    * Cleans up stale jobs by canceling jobs that have not been updated for maxJobDurationMs * 2
    * Uses maxJobDurationMs from config
    * @returns Object containing counts of checked and canceled jobs
    */
-  async cleanup(): Promise<{ checkedCount: number; canceledCount: number }> {
+  async cleanupJobs(): Promise<{ checkedCount: number; canceledCount: number }> {
     const STALE_JOB_THRESHOLD_MS = this.maxJobDurationMs * 2;
     
     logger.info(`Running job cleanup with threshold of ${STALE_JOB_THRESHOLD_MS}ms`);

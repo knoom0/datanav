@@ -7,6 +7,7 @@ import { getUserDataSource } from "@/lib/entities";
 import { APIError } from "@/lib/errors";
 import logger from "@/lib/logger";
 import { withAPIErrorHandler, callInternalAPI } from "@/lib/util/api-utils";
+import { getCurrentUserId } from "@/lib/util/auth-util";
 
 async function handler(
   request: Request,
@@ -20,10 +21,13 @@ async function handler(
 
   logger.info(`Connecting to data connector: ${connectorId}`);
 
+  // Get the current user ID
+  const userId = await getCurrentUserId();
+
   // Get the data source and create catalog
   const dataSource = await getUserDataSource();
   const catalog = new DataCatalog({ dataSource });
-  const connectorConfig = await catalog.getConfig(connectorId);
+  const connectorConfig = await catalog.get(connectorId);
 
   if (!connectorConfig) {
     throw new APIError(`Data connector not found: ${connectorId}`, 404);
@@ -48,7 +52,7 @@ async function handler(
   } else {
     // Start the initial connection process
     logger.info(`Starting connection for connector: ${connectorId}`);
-    result = await connector.connect({ redirectTo });
+    result = await connector.connect({ redirectTo, userId });
   }
   logger.info(`Connection result for ${connectorId}: ${JSON.stringify(result)}`);
 

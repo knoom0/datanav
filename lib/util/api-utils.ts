@@ -79,14 +79,14 @@ export function getBaseUrl(request: NextRequest): string {
  * 
  * @param params - Configuration object
  * @param params.endpoint - The endpoint to call (e.g., "/api/data/load")
- * @param params.request - The original request object to get base URL and forward authentication cookies
+ * @param params.request - Optional request object to get base URL and forward authentication cookies. If not provided, uses next/headers
  * @param params.method - HTTP method (defaults to "GET")
  * @param params.headers - Additional headers to include
  * @param params.body - Request body to send
  */
 export async function callInternalAPI(params: {
   endpoint: string;
-  request: Request;
+  request?: Request;
   method?: "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
   headers?: Record<string, string>;
   body?: any;
@@ -94,13 +94,31 @@ export async function callInternalAPI(params: {
   const { endpoint, request, method = "GET", headers = {}, body } = params;
   
   try {
-    // Get base URL from request
-    const baseUrl = new URL(request.url).origin;
-    const url = `${baseUrl}${endpoint}`;
+    let baseUrl: string;
+    let cookieHeader: string | null = null;
+    let authHeader: string | null = null;
     
-    // Extract cookies and authorization header from the original request for authentication
-    const cookieHeader = request.headers.get("cookie");
-    const authHeader = request.headers.get("authorization");
+    if (request) {
+      // Get base URL and headers from request
+      baseUrl = new URL(request.url).origin;
+      cookieHeader = request.headers.get("cookie");
+      authHeader = request.headers.get("authorization");
+    } else {
+      // Use next/headers when request is not provided
+      const { headers: nextHeaders } = await import("next/headers");
+      const headersList = await nextHeaders();
+      
+      // Get base URL from host header
+      const host = headersList.get("host");
+      const protocol = process.env.NODE_ENV === "production" ? "https" : "http";
+      baseUrl = `${protocol}://${host}`;
+      
+      // Extract cookies and authorization header for authentication
+      cookieHeader = headersList.get("cookie");
+      authHeader = headersList.get("authorization");
+    }
+    
+    const url = `${baseUrl}${endpoint}`;
     
     const response = await fetch(url, {
       method,

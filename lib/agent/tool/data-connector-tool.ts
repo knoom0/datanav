@@ -2,7 +2,7 @@ import { z } from "zod/v3";
 
 import { BaseAgentTool } from "@/lib/agent/core/agent";
 import { DataCatalog } from "@/lib/data/catalog";
-import { DataJobScheduler, JobState } from "@/lib/data/job";
+import { DataJobScheduler } from "@/lib/data/job";
 import { DataConnectorStatusEntity } from "@/lib/entities";
 import logger from "@/lib/logger";
 import { ActionableError, DataConnectorInfo } from "@/lib/types";
@@ -69,7 +69,7 @@ export class DataConnectorTool extends BaseAgentTool {
     this.askToConnectTimeoutSeconds = config.askToConnectTimeoutSeconds ?? ASK_TO_CONNECT_TIMEOUT_SECONDS;
     this.loadDataTimeoutSeconds = config.loadDataTimeoutSeconds ?? LOAD_DATA_TIMEOUT_SECONDS;
     
-    // Get dataSource from dataCatalog
+    // Initialize job scheduler
     const dataSource = this.dataCatalog.getDataSource();
     this.jobScheduler = new DataJobScheduler({
       dataSource,
@@ -110,7 +110,7 @@ export class DataConnectorTool extends BaseAgentTool {
 
   private async askToConnect(connectorId: string): Promise<AskToConnectResult> {
     // Guard clause: validate connector exists
-    const config = await this.dataCatalog.getConfig(connectorId);
+    const config = await this.dataCatalog.get(connectorId);
     if (!config) {
       throw new ActionableError(`Connector with ID '${connectorId}' not found`);
     }
@@ -207,88 +207,89 @@ export class DataConnectorTool extends BaseAgentTool {
   }
 
   private async loadData(connectorId: string): Promise<LoadDataResult> {
-    // Guard clause: validate connector exists
-    const config = await this.dataCatalog.getConfig(connectorId);
-    if (!config) {
+    // Get or create data load job (validates connector and checks status)
+    const jobId = await this.getOrCreateDataLoadJob({ connectorId });
+
+    // Wait for job completion
+    const { job, success: completed, durationMs } = await this.jobScheduler.waitForJobCompletion({
+      id: jobId,
+      timeoutMs: this.loadDataTimeoutSeconds * 1000,
+      pollingIntervalMs: POLLING_INTERVAL_MS
+    });
+
+    const duration = Math.round(durationMs / 1000);
+
+    // Timeout
+    if (!completed) {
+      logger.warn(`Data load for ${connectorId} timed out after ${duration}s`);
+      return {
+        success: false,
+        connectorId,
+        jobId,
+        message: `Data load from ${connectorId} timed out after ${duration} seconds. The job is still running in the background.`
+      };
+    }
+
+    // Job completed - check result
+    const isSuccess = job.result === "success";
+    const recordsLoaded = job.progress?.updatedRecordCount || 0;
+
+    if (isSuccess) {
+      logger.info(`Data load completed for ${connectorId} in ${duration}s. Records loaded: ${recordsLoaded}`);
+    } else {
+      logger.error(`Data load failed for ${connectorId}: ${job.error || "Unknown error"}`);
+    }
+
+    return {
+      success: isSuccess,
+      connectorId,
+      jobId,
+      message: isSuccess
+        ? `Successfully loaded ${recordsLoaded} records from ${connectorId} in ${duration} seconds`
+        : `Failed to load data from ${connectorId}: ${job.error || "Unknown error"}`,
+      ...(isSuccess && { recordsLoaded })
+    };
+  }
+
+  /**
+   * Gets existing job ID if connector is already loading, otherwise creates and triggers a new job
+   * Also validates connector exists and is connected
+   */
+  private async getOrCreateDataLoadJob(params: {
+    connectorId: string;
+  }): Promise<string> {
+    const { connectorId } = params;
+
+    // Get connector info to check status
+    const connectorInfo = await this.dataCatalog.getConnectorInfo(connectorId);
+    if (!connectorInfo) {
       throw new ActionableError(`Connector with ID '${connectorId}' not found`);
     }
 
-    // Guard clause: check if connector is connected
-    const connectorInfo = await this.dataCatalog.getConnectorInfo(connectorId);
-    if (!connectorInfo?.isConnected) {
-      throw new ActionableError(`Connector '${config.name}' is not connected. Please connect first using ask_to_connect operation.`);
+    // Check if connector is connected
+    if (!connectorInfo.isConnected) {
+      throw new ActionableError(`Connector '${connectorInfo.name}' is not connected. Please connect first using ask_to_connect operation.`);
     }
 
-    // Guard clause: check if already loading
-    if (connectorInfo.isLoading) {
-      throw new ActionableError(`Connector '${config.name}' is already loading data. Please wait for the current job to complete.`);
+    // Use existing job if already loading
+    if (connectorInfo.isLoading && connectorInfo.dataJobId) {
+      logger.info(`Connector ${connectorId} is already loading (job ${connectorInfo.dataJobId}), waiting for completion`);
+      return connectorInfo.dataJobId;
     }
 
-    logger.info(`Starting data load for connector ${connectorId} (${config.name})`);
-
-    // Create and run the job
-    const jobId = await this.jobScheduler.create({
-      dataConnectorId: connectorId
+    // Create and trigger a new job
+    logger.info(`Starting data load for connector ${connectorId} (${connectorInfo.name})`);
+    
+    const jobId = await this.jobScheduler.createJob({
+      dataConnectorId: connectorId,
+      type: "load"
     });
 
-    // Start the job (non-blocking)
-    // Note: We don't await this because we want to poll the status instead
-    this.jobScheduler.run({ id: jobId }).catch(err => {
-      logger.error(`Job ${jobId} failed to run: ${err}`);
-    });
+    await this.jobScheduler.triggerJob({ id: jobId });
 
-    // Poll for job completion
-    const startTime = Date.now();
-    const timeoutMs = this.loadDataTimeoutSeconds * 1000;
+    logger.info(`Data load job ${jobId} triggered for connector ${connectorId}`);
     
-    while (Date.now() - startTime < timeoutMs) {
-      // Wait before checking status
-      await new Promise(resolve => setTimeout(resolve, POLLING_INTERVAL_MS));
-      
-      const job = await this.jobScheduler.get({ id: jobId });
-      
-      if (!job) {
-        throw new ActionableError(`Job ${jobId} not found`);
-      }
-
-      // Check if job is finished
-      if (job.state === JobState.FINISHED) {
-        const duration = Math.round((Date.now() - startTime) / 1000);
-        
-        if (job.result === "success") {
-          const recordsLoaded = job.progress?.updatedRecordCount || 0;
-          logger.info(`Data load completed for ${connectorId} in ${duration}s. Records loaded: ${recordsLoaded}`);
-          
-          return {
-            success: true,
-            connectorId,
-            jobId,
-            message: `Successfully loaded ${recordsLoaded} records from ${config.name} in ${duration} seconds`,
-            recordsLoaded
-          };
-        } else {
-          const errorMsg = job.error || "Unknown error";
-          logger.error(`Data load failed for ${connectorId}: ${errorMsg}`);
-          
-          return {
-            success: false,
-            connectorId,
-            jobId,
-            message: `Failed to load data from ${config.name}: ${errorMsg}`
-          };
-        }
-      }
-    }
-
-    // Timeout case
-    const duration = Math.round((Date.now() - startTime) / 1000);
-    logger.warn(`Data load for ${connectorId} timed out after ${duration}s`);
-    
-    return {
-      success: false,
-      connectorId,
-      jobId,
-      message: `Data load from ${config.name} timed out after ${duration} seconds. The job is still running in the background.`
-    };
+    return jobId;
   }
 }
+

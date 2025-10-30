@@ -121,10 +121,11 @@ describe("DataCatalog", () => {
       const defaultCatalog = new DataCatalog({ dataSource: testDataSource });
       
       const connectorInfos = await defaultCatalog.getAll();
-      expect(connectorInfos).toHaveLength(3);
+      expect(connectorInfos).toHaveLength(4);
       expect(connectorInfos.map(c => c.id)).toContain("google_calendar");
       expect(connectorInfos.map(c => c.id)).toContain("gmail");
       expect(connectorInfos.map(c => c.id)).toContain("youtube");
+      expect(connectorInfos.map(c => c.id)).toContain("plaid");
     });
   });
 
@@ -135,17 +136,17 @@ describe("DataCatalog", () => {
         connectorConfigs: [mockConfig1] 
       });
       
-      const config = await customCatalog.getConfig(mockConfig1.id!);
+      const config = await customCatalog.get(mockConfig1.id!);
       expect(config?.id).toBe(mockConfig1.id);
     });
     
     it("should return null for non-existing connector", async () => {
-      const config = await catalog.getConfig("non-existing-id");
+      const config = await catalog.get("non-existing-id");
       expect(config).toBeNull();
     });
     
     it("should return google calendar config by default", async () => {
-      const config = await catalog.getConfig("google_calendar");
+      const config = await catalog.get("google_calendar");
       expect(config).not.toBeNull();
       expect(config?.id).toBe("google_calendar");
     });
@@ -215,10 +216,11 @@ describe("DataCatalog", () => {
   describe("getAll", () => {
     it("should return default connector configs", async () => {
       const connectorInfos = await catalog.getAll();
-      expect(connectorInfos).toHaveLength(3);
+      expect(connectorInfos).toHaveLength(4);
       expect(connectorInfos.map(c => c.id)).toContain("google_calendar");
       expect(connectorInfos.map(c => c.id)).toContain("gmail");
       expect(connectorInfos.map(c => c.id)).toContain("youtube");
+      expect(connectorInfos.map(c => c.id)).toContain("plaid");
     });
 
     it("should return all bundled data connector configs", async () => {
@@ -300,10 +302,10 @@ describe("DataCatalog", () => {
 
   describe("addNew", () => {
     it("should add a new connector config to the catalog and database", async () => {
-      await catalog.addNew(mockConfig1);
+      await catalog.create(mockConfig1);
       
       // Verify it's in memory
-      const config = await catalog.getConfig(mockConfig1.id!);
+      const config = await catalog.get(mockConfig1.id!);
       expect(config).toBeDefined();
       expect(config?.id).toBe(mockConfig1.id);
       
@@ -320,14 +322,14 @@ describe("DataCatalog", () => {
         dataLoaderFactory: () => mockDataLoader1
       };
       
-      await catalog.addNew(configWithoutId);
+      await catalog.create(configWithoutId);
       
       // ID should now be set and follow the pattern: lowercase_name_with_underscores_<6char-suffix>
       expect(configWithoutId.id).toBeTruthy();
       expect(configWithoutId.id).toMatch(/^gmail_messages_[a-z0-9]{6}$/);
       
       // Verify it was saved
-      const config = await catalog.getConfig(configWithoutId.id!);
+      const config = await catalog.get(configWithoutId.id!);
       expect(config).toBeDefined();
       expect(config?.name).toBe("Gmail Messages");
     });
@@ -347,8 +349,8 @@ describe("DataCatalog", () => {
         dataLoaderFactory: () => mockDataLoader2
       };
       
-      await catalog.addNew(config1);
-      await catalog.addNew(config2);
+      await catalog.create(config1);
+      await catalog.create(config2);
       
       // Both should have IDs with the same prefix but different suffixes
       expect(config1.id).toBeTruthy();
@@ -359,10 +361,10 @@ describe("DataCatalog", () => {
     });
     
     it("should reject duplicate connector IDs", async () => {
-      await catalog.addNew(mockConfig1);
+      await catalog.create(mockConfig1);
       
       // Attempt to add the same connector again
-      await expect(catalog.addNew(mockConfig1)).rejects.toThrow("already exists");
+      await expect(catalog.create(mockConfig1)).rejects.toThrow("already exists");
     });
     
     it("should reject adding a connector with an existing pre-defined ID", async () => {
@@ -371,7 +373,7 @@ describe("DataCatalog", () => {
         id: "google_calendar"
       };
       
-      await expect(catalog.addNew(duplicateConfig)).rejects.toThrow("already exists");
+      await expect(catalog.create(duplicateConfig)).rejects.toThrow("already exists");
     });
   });
 });
