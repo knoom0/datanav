@@ -42,13 +42,13 @@ export const config = {
     }
   },
 
-  github: {
-    repo: "knoom0/datanav",
-  },
-
   email: {
     sender: "noreply@datanav.app",
     senderName: "DataNav"
+  },
+
+  github: {
+    repo: "knoom0/datanav",
   },
 
   hosting: {
@@ -57,6 +57,11 @@ export const config = {
 
   job: {
     maxJobDurationMs: 60000,
+  },
+
+  model: {
+    small: "openai:gpt-4o-mini",
+    embedding: "openai:text-embedding-3-small",
   },
 
   packages: {

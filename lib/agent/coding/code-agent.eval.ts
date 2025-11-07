@@ -256,7 +256,7 @@ Create a comprehensive net worth tracking screen that serves as a financial dash
 describe.sequential("CodeAgent eval", () => {
   testCases.forEach(({ name, referenceImage, userPrompt, prd }) => {
     it(name, async () => {
-      const project = new Project("");
+      const project = new Project();
       project.put(mockDataSpec);
       project.put({
         type: "prd",

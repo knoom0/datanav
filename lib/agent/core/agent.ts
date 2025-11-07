@@ -171,8 +171,8 @@ export type EvalParams = {
 };
 
 export interface EvoAgent {
-  readonly project: Project;
-  stream(params: StreamParams): UIMessageStream;
+  project: Project;
+  stream(params: StreamParams): UIMessageStream | Promise<UIMessageStream>;
 }
 
 export type IterationResult = {
@@ -183,12 +183,20 @@ export type IterationResult = {
 };
 
 export abstract class EvoAgentBase implements EvoAgent {
-  readonly project: Project;
+  private _project: Project;
   protected readonly maxIterations: number;
 
   constructor({ project, maxIterations = 1 }: { project: Project; maxIterations?: number }) {
-    this.project = project;
+    this._project = project;
     this.maxIterations = maxIterations;
+  }
+
+  get project(): Project {
+    return this._project;
+  }
+
+  set project(value: Project) {
+    this._project = value;
   }
 
   abstract iterate(params: { messages: ModelMessage[], writer: UIMessageStreamWriter, iteration: number }): Promise<IterationResult>;
@@ -286,6 +294,7 @@ export abstract class EvoAgentBase implements EvoAgent {
     });
   }
 }
+
 
 
 /**
@@ -390,7 +399,7 @@ export class EvoAgentChain implements EvoAgent {
           if (agentResult) {
             agentResult = null;
           }
-          const res = agent.stream({
+          const resOrPromise = agent.stream({
             messages,
             onFinish: ({ result, nextAction }) => {
               agentResult = result;
@@ -407,6 +416,9 @@ export class EvoAgentChain implements EvoAgent {
               agentError = error;
             }
           });
+
+          // Await if it's a promise
+          const res = resOrPromise instanceof Promise ? await resOrPromise : resOrPromise;
 
           await pipeUIMessageStream(res, writer, { omitStartFinish: true });
 

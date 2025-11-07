@@ -33,6 +33,10 @@ export interface Config {
   job: {
     maxJobDurationMs: number;
   };
+  model: {
+    small: string;
+    embedding: string;
+  };
   packages: Record<string, any>;
 }
 

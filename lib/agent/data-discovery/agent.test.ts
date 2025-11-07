@@ -64,7 +64,7 @@ describeIf(
     });
     
     // Create test project
-    project = new Project("test data discovery project");
+    project = new Project();
     
     // Create agent instance with test-specific configuration
     // Note: We can"t override the DataConnectorTool timeout directly from here,

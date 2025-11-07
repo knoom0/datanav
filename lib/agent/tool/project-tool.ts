@@ -1,16 +1,16 @@
 import { z } from "zod";
 
 import { BaseAgentTool } from "@/lib/agent/core/agent";
-import { Project, Artifact, PRD, Design, DataSpec, Code, Report, ActionableError } from "@/lib/types";
+import { Project, Artifact, PRD, Design, DataSpec, Code, Report, Strategy, ActionableError } from "@/lib/types";
 
 /**
  * Schema for ProjectTool parameters
  */
 const ProjectToolSchema = z.object({
   operation: z.enum(["put", "get"]).describe("The operation to perform on the project"),
-  artifactType: z.enum(["prd", "design", "data_spec", "code", "report"]).describe("The type of artifact to work with"),
+  artifactType: z.enum(["prd", "design", "data_spec", "code", "report", "strategy"]).describe("The type of artifact to work with"),
   artifact: z.object({
-    text: z.string().optional().describe("Required when putting a prd, code, or report artifact"),
+    text: z.string().optional().describe("Required when putting a prd, code, report, or strategy artifact"),
     images: z.array(z.object({
       imageBase64: z.string(),
       description: z.string()
@@ -34,11 +34,11 @@ export type ProjectToolParams = z.infer<typeof ProjectToolSchema>;
 
 /**
  * Tool that provides project artifact management capabilities to agents.
- * Allows agents to put (store) and get (retrieve) project artifacts like PRD, Design, DataSpec, Code, and Report.
+ * Allows agents to put (store) and get (retrieve) project artifacts like PRD, Design, DataSpec, Code, Report, and Strategy.
  */
 export class ProjectTool extends BaseAgentTool {
   readonly name = "project_tool";
-  readonly description = "Manage project artifacts including PRD, Design, DataSpec, Code, and Report. Supports put and get operations.";
+  readonly description = "Manage project artifacts including PRD, Design, DataSpec, Code, Report, and Strategy. Supports put and get operations. IMPORTANT: Before performing your task, always check if a 'strategy' artifact exists using get operation. If a strategy is found, follow it carefully as guidance for how to approach and execute your work.";
   readonly inputSchema = ProjectToolSchema;
 
   private project: Project;
@@ -132,6 +132,16 @@ export class ProjectTool extends BaseAgentTool {
         } as Report;
         break;
       
+      case "strategy":
+        if (!artifactData.text) {
+          throw new ActionableError("Strategy artifact requires text field");
+        }
+        artifact = {
+          type: "strategy",
+          text: artifactData.text
+        } as Strategy;
+        break;
+      
       default:
         throw new ActionableError(`Unknown artifact type: ${artifactType}`);
       }
@@ -140,7 +150,7 @@ export class ProjectTool extends BaseAgentTool {
       
       return {
         success: true,
-        message: `Successfully stored ${artifactType} artifact in project ${this.project.id}`
+        message: `Successfully stored ${artifactType} artifact in project`
       };
       
     } catch (error) {

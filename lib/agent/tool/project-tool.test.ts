@@ -6,7 +6,7 @@ describe("ProjectTool", () => {
   let projectTool: ProjectTool;
 
   beforeEach(() => {
-    project = new Project("Test project for ProjectTool");
+    project = new Project();
     projectTool = new ProjectTool(project);
   });
 

@@ -10,7 +10,7 @@ describe("PlanGen", () => {
   let mockDbClient: DatabaseClient;
 
   beforeEach(() => {
-    project = new Project("Test project for dashboard");
+    project = new Project();
     mockDbClient = {
       getTableInfo: vi.fn().mockResolvedValue([]),
       query: vi.fn().mockResolvedValue([])

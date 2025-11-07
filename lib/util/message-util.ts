@@ -1,7 +1,31 @@
 import { UIMessage } from "@ai-sdk/react";
 import { ModelMessage } from "ai";
 
-import { Project, PROJECT_PART_TYPE, UI_BUNDLE_PART_TYPE, REPORT_BUNDLE_PART_TYPE, Artifact } from "@/lib/types";
+import { Project, PROJECT_PART_TYPE, UI_BUNDLE_PART_TYPE, REPORT_BUNDLE_PART_TYPE, Artifact, TypedUIMessage } from "@/lib/types";
+
+/**
+ * Extract text content from a UIMessage
+ * Handles both simple content strings and structured parts
+ */
+export function extractTextFromMessage(message: TypedUIMessage): string {
+  // Check for simple content string (UIMessage can have content property)
+  if ((message as any).content && typeof (message as any).content === "string") {
+    return (message as any).content;
+  }
+
+  // Check for parts array
+  if (message.parts && Array.isArray(message.parts)) {
+    const textParts = message.parts
+      .filter((part: any) => part.type === "text")
+      .map((part: any) => part.text || "")
+      .join(" ");
+    if (textParts) {
+      return textParts;
+    }
+  }
+
+  return "";
+}
 
 /**
  * Extract a Project object from the last assistant message annotations
@@ -95,5 +119,20 @@ export function extractArtifacts(message: UIMessage): Artifact[] {
   }
 
   return artifacts;
+}
+
+/**
+ * Convert an array to a ReadableStream
+ * Creates a stream that yields each item from the array in order
+ */
+export function arrayToStream<T>(items: T[]): ReadableStream<T> {
+  return new ReadableStream<T>({
+    start(controller) {
+      for (const item of items) {
+        controller.enqueue(item);
+      }
+      controller.close();
+    }
+  });
 }
 

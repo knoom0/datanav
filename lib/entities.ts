@@ -1,11 +1,12 @@
 import "server-only";
 import "reflect-metadata";
 
+import { type InferUIMessageChunk, type UIMessage } from "ai";
 import { DataSource, Entity, PrimaryColumn, PrimaryGeneratedColumn, Column, BaseEntity, type DataSourceOptions, Unique, CreateDateColumn, UpdateDateColumn } from "typeorm";
 
 import { getUserDataSourceOptions } from "@/lib/hosting/user-database";
 import logger from "@/lib/logger";
-import type { DataSpec } from "@/lib/types";
+import type { DataSpec, TypedUIMessage } from "@/lib/types";
 import { getCurrentUserId } from "@/lib/util/auth-util";
 import { createSchemaIfNotExist } from "@/lib/util/db-util";
 import { safeErrorString } from "@/lib/util/log-util";
@@ -361,6 +362,43 @@ export type DataRecord = {
   [key: string]: any;
 };
 
+@Entity({ name: "agent_session", schema: SCHEMA_NAME })
+export class AgentSessionEntity extends BaseEntity {
+  @PrimaryColumn({ type: "varchar" })
+    id!: string;
+
+  @Column({ type: "json" })
+    uiMessages!: TypedUIMessage[];
+
+  /**
+   * Optional title for the session, displayed in the UI
+   */
+  @Column({ type: "varchar", nullable: true })
+    title!: string | null;
+
+  /**
+   * The UI message stream chunks being streamed, stored separately for efficiency.
+   * This field is continuously updated during streaming with UIMessageChunks.
+   * Once the stream completes, chunks are converted to a UIMessage and merged into
+   * the uiMessages array.
+   */
+  @Column({ type: "json", nullable: true })
+    uiMessageChunks!: Array<InferUIMessageChunk<UIMessage>> | null;
+
+  /**
+   * The project associated with this session, serialized as JSON.
+   * This includes the project ID, prompt, artifacts, and metadata.
+   */
+  @Column({ type: "json", nullable: true })
+    project!: any | null;
+
+  @CreateDateColumn()
+    createdAt!: Date;
+
+  @UpdateDateColumn()
+    updatedAt!: Date;
+}
+
 export const ENTITIES = [
   ComponentInfoEntity,
   DataConnectorConfigEntity,
@@ -371,7 +409,8 @@ export const ENTITIES = [
   PulseConfigEntity,
   PulseJobEntity,
   ReportBundleEntity,
-  UIBundleEntity
+  UIBundleEntity,
+  AgentSessionEntity
 ] as const;
 
 // Common database options shared across all user data sources
@@ -418,7 +457,6 @@ async function createFullTextSearchIndexesForUser(userDataSource: DataSource) {
     logger.warn(`Failed to create full-text search indexes for user: ${safeErrorString(error)}`);
   }
 }
-
 
 export async function getUserDataSource(): Promise<DataSource> {
   // Get current user ID from Supabase authentication

@@ -35,7 +35,7 @@ describeIf(
   });
 
   beforeEach(() => {
-    project = new Project("test project prompt");
+    project = new Project();
     agent = new ReportingAgent({ project, dbClient });
   });
 
