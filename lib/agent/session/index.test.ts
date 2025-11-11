@@ -4,12 +4,12 @@ import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from
 
 import { EvoAgent, StreamParams, UIMessageStream } from "@/lib/agent/core/agent";
 import { updateConfig } from "@/lib/config";
-import { AgentSessionEntity, getUserDataSource } from "@/lib/entities";
+import { AgentSessionEntity } from "@/lib/entities";
 import { registerAgentClass } from "@/lib/meta-agent";
 import { Project, TypedUIMessage } from "@/lib/types";
 import { extractTextFromMessage, streamToArray } from "@/lib/util/message-util";
 import { getSessionStreamKey } from "@/lib/util/redis-util";
-import { setupTestRedis, teardownTestRedis, type TestRedisSetup } from "@/lib/util/test-util";
+import { setupTestDatabase, teardownTestDatabase, setupTestRedis, teardownTestRedis, type TestDatabaseSetup, type TestRedisSetup } from "@/lib/util/test-util";
 
 import { AgentSession } from "./index";
 
@@ -62,11 +62,16 @@ registerAgentClass({
 });
 
 describe("AgentSession", () => {
+  let testDbSetup: TestDatabaseSetup;
   let dataSource: DataSource;
   let redisSetup: TestRedisSetup;
   const sessionId = "test-session-123";
 
   beforeAll(async () => {
+    // Set up PostgreSQL test database
+    testDbSetup = await setupTestDatabase();
+    dataSource = testDbSetup.dataSource;
+    
     // Set up Redis testcontainer
     redisSetup = await setupTestRedis();
     
@@ -75,15 +80,14 @@ describe("AgentSession", () => {
   }, 60000);
 
   afterAll(async () => {
+    // Clean up test database
+    await teardownTestDatabase(testDbSetup);
+    
     // Clean up Redis testcontainer
     await teardownTestRedis(redisSetup);
   }, 60000);
 
   beforeEach(async () => {
-    // Get user data source (requires authentication context in real usage)
-    // For testing, we can use getUserDataSource which will use test environment
-    dataSource = await getUserDataSource();
-
     // Clear any existing session data
     const sessionRepo = dataSource.getRepository(AgentSessionEntity);
     await sessionRepo.delete({ id: sessionId });
