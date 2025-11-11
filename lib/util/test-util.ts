@@ -1,5 +1,6 @@
 import { PostgreSqlContainer, StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { createUIMessageStream, type ModelMessage, type UIMessageStreamWriter, readUIMessageStream } from "ai";
+import { GenericContainer, type StartedTestContainer } from "testcontainers";
 import { DataSource, type DataSourceOptions } from "typeorm";
 import { describe } from "vitest";
 
@@ -242,3 +243,46 @@ export function envVarsCondition(
   return true;
 }
 
+/**
+ * Redis test setup
+ */
+export interface TestRedisSetup {
+  container: StartedTestContainer;
+  client: any; // RedisClientType - use any to avoid version mismatch issues
+  url: string;
+}
+
+/**
+ * Starts a Redis container and creates a configured client
+ */
+export async function setupTestRedis(): Promise<TestRedisSetup> {
+  // Start Redis container
+  const container = await new GenericContainer("redis:7-alpine")
+    .withExposedPorts(6379)
+    .start();
+
+  const host = container.getHost();
+  const port = container.getMappedPort(6379);
+  const url = `redis://${host}:${port}`;
+
+  // Create Redis client
+  const { createClient } = await import("redis");
+  const client = createClient({ url });
+
+  // Connect the client
+  await client.connect();
+
+  return { container, client, url };
+}
+
+/**
+ * Cleans up the test Redis instance and stops the container
+ */
+export async function teardownTestRedis(setup: TestRedisSetup): Promise<void> {
+  if (setup.client?.isOpen) {
+    await setup.client.quit();
+  }
+  if (setup.container) {
+    await setup.container.stop();
+  }
+}

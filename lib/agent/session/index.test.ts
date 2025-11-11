@@ -1,13 +1,14 @@
 import { ModelMessage, createUIMessageStream, consumeStream } from "ai";
 import { DataSource } from "typeorm";
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll, vi } from "vitest";
 
 import { EvoAgent, StreamParams, UIMessageStream } from "@/lib/agent/core/agent";
 import { AgentSessionEntity, getUserDataSource } from "@/lib/entities";
 import { registerAgentClass } from "@/lib/meta-agent";
 import { Project, TypedUIMessage } from "@/lib/types";
 import { extractTextFromMessage, streamToArray } from "@/lib/util/message-util";
-import { getRedisClient, getSessionStreamKey } from "@/lib/util/redis-util";
+import { getSessionStreamKey } from "@/lib/util/redis-util";
+import { setupTestRedis, teardownTestRedis, type TestRedisSetup } from "@/lib/util/test-util";
 
 import { AgentSession } from "./index";
 
@@ -59,9 +60,42 @@ registerAgentClass({
   factory: ({ project }) => new MockAgent(project)
 });
 
+// Module-level variable to store Redis URL for mocking
+let testRedisUrl: string | null = null;
+
+// Mock getRedisClient at module level
+vi.mock("@/lib/util/redis-util", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/util/redis-util")>("@/lib/util/redis-util");
+  return {
+    ...actual,
+    getRedisClient: vi.fn(async () => {
+      const { createClient } = await import("redis");
+      if (!testRedisUrl) {
+        throw new Error("Test Redis not initialized");
+      }
+      const client = createClient({ url: testRedisUrl });
+      await client.connect();
+      return client;
+    }),
+  };
+});
+
 describe("AgentSession", () => {
   let dataSource: DataSource;
+  let redisSetup: TestRedisSetup;
   const sessionId = "test-session-123";
+
+  beforeAll(async () => {
+    // Set up Redis testcontainer
+    redisSetup = await setupTestRedis();
+    testRedisUrl = redisSetup.url;
+  }, 60000);
+
+  afterAll(async () => {
+    // Clean up Redis testcontainer
+    await teardownTestRedis(redisSetup);
+    vi.clearAllMocks();
+  }, 60000);
 
   beforeEach(async () => {
     // Get user data source (requires authentication context in real usage)
@@ -71,12 +105,20 @@ describe("AgentSession", () => {
     // Clear any existing session data
     const sessionRepo = dataSource.getRepository(AgentSessionEntity);
     await sessionRepo.delete({ id: sessionId });
+    
+    // Clear Redis test data
+    const streamKey = getSessionStreamKey({ sessionId });
+    await redisSetup.client.del(streamKey);
   });
 
   afterEach(async () => {
     // Clean up test data
     const sessionRepo = dataSource.getRepository(AgentSessionEntity);
     await sessionRepo.delete({ id: sessionId });
+    
+    // Clear Redis test data
+    const streamKey = getSessionStreamKey({ sessionId });
+    await redisSetup.client.del(streamKey);
   });
 
   it("should create a new AgentSession and save to database", async () => {
@@ -226,32 +268,23 @@ describe("AgentSession", () => {
   });
 
   describe("resumeChatStream", () => {
-    let redis: Awaited<ReturnType<typeof getRedisClient>>;
-
+    // Use the shared Redis setup from the parent describe block
     beforeEach(async () => {
-      // Create Redis client for test suite
-      redis = await getRedisClient();
-      
       // Clean up Redis stream before each test
       const streamKey = getSessionStreamKey({ sessionId });
-      await redis.del(streamKey);
-    });
-
-    afterEach(async () => {
-      // Clean up Redis client after each test
-      await redis.quit();
+      await redisSetup.client.del(streamKey);
     });
 
     it("should stream initial chunks immediately", async () => {
       // Pre-populate Redis with message chunks
       const streamKey = getSessionStreamKey({ sessionId });
       
-      await redis.xAdd(streamKey, "*", { type: "stream-chunk", data: JSON.stringify({ type: "text-start", id: "msg-1" }) });
-      await redis.xAdd(streamKey, "*", { type: "stream-chunk", data: JSON.stringify({ type: "text-delta", id: "msg-1", delta: "Hello" }) });
-      await redis.xAdd(streamKey, "*", { type: "stream-chunk", data: JSON.stringify({ type: "text-delta", id: "msg-1", delta: " world" }) });
-      await redis.xAdd(streamKey, "*", { type: "stream-chunk", data: JSON.stringify({ type: "text-end", id: "msg-1" }) });
+      await redisSetup.client.xAdd(streamKey, "*", { type: "stream-chunk", data: JSON.stringify({ type: "text-start", id: "msg-1" }) });
+      await redisSetup.client.xAdd(streamKey, "*", { type: "stream-chunk", data: JSON.stringify({ type: "text-delta", id: "msg-1", delta: "Hello" }) });
+      await redisSetup.client.xAdd(streamKey, "*", { type: "stream-chunk", data: JSON.stringify({ type: "text-delta", id: "msg-1", delta: " world" }) });
+      await redisSetup.client.xAdd(streamKey, "*", { type: "stream-chunk", data: JSON.stringify({ type: "text-end", id: "msg-1" }) });
       // Add sentinel message to signal end of stream
-      await redis.xAdd(streamKey, "*", { type: "stream-end", data: JSON.stringify({ type: "stream-end" }) });
+      await redisSetup.client.xAdd(streamKey, "*", { type: "stream-end", data: JSON.stringify({ type: "stream-end" }) });
 
       const sessionRepo = dataSource.getRepository(AgentSessionEntity);
       await sessionRepo.save({
@@ -283,8 +316,8 @@ describe("AgentSession", () => {
       // Pre-populate Redis with initial chunks
       const streamKey = getSessionStreamKey({ sessionId });
       
-      await redis.xAdd(streamKey, "*", { type: "stream-chunk", data: JSON.stringify({ type: "text-start", id: "msg-1" }) });
-      await redis.xAdd(streamKey, "*", { type: "stream-chunk", data: JSON.stringify({ type: "text-delta", id: "msg-1", delta: "Initial" }) });
+      await redisSetup.client.xAdd(streamKey, "*", { type: "stream-chunk", data: JSON.stringify({ type: "text-start", id: "msg-1" }) });
+      await redisSetup.client.xAdd(streamKey, "*", { type: "stream-chunk", data: JSON.stringify({ type: "text-delta", id: "msg-1", delta: "Initial" }) });
 
       const sessionRepo = dataSource.getRepository(AgentSessionEntity);
       await sessionRepo.save({
@@ -304,8 +337,8 @@ describe("AgentSession", () => {
 
       // Simulate adding new chunks in the background
       setTimeout(async () => {
-        await redis.xAdd(streamKey, "*", { type: "stream-chunk", data: JSON.stringify({ type: "text-delta", id: "msg-1", delta: " more" }) });
-        await redis.xAdd(streamKey, "*", { type: "stream-end", data: JSON.stringify({ type: "stream-end" }) });
+        await redisSetup.client.xAdd(streamKey, "*", { type: "stream-chunk", data: JSON.stringify({ type: "text-delta", id: "msg-1", delta: " more" }) });
+        await redisSetup.client.xAdd(streamKey, "*", { type: "stream-end", data: JSON.stringify({ type: "stream-end" }) });
       }, 500);
 
       // Collect all chunks
@@ -322,7 +355,7 @@ describe("AgentSession", () => {
       // Pre-populate Redis with initial chunk
       const streamKey = getSessionStreamKey({ sessionId });
       
-      await redis.xAdd(streamKey, "*", { type: "stream-chunk", data: JSON.stringify({ type: "text-start", id: "msg-1" }) });
+      await redisSetup.client.xAdd(streamKey, "*", { type: "stream-chunk", data: JSON.stringify({ type: "text-start", id: "msg-1" }) });
 
       const sessionRepo = dataSource.getRepository(AgentSessionEntity);
       await sessionRepo.save({
@@ -342,8 +375,8 @@ describe("AgentSession", () => {
 
       // Delete Redis stream after short delay to stop streaming
       setTimeout(async () => {
-        await redis.xAdd(streamKey, "*", { type: "stream-end" });
-        await redis.del(streamKey);
+        await redisSetup.client.xAdd(streamKey, "*", { type: "stream-end" });
+        await redisSetup.client.del(streamKey);
       }, 200);
 
       // Collect all chunks
@@ -385,18 +418,11 @@ describe("AgentSession", () => {
   });
 
   describe("finalizeStaleStream", () => {
-    let redis: Awaited<ReturnType<typeof getRedisClient>>;
-
+    // Use the shared Redis setup from the parent describe block
     beforeEach(async () => {
-      redis = await getRedisClient();
-      
       // Clean up Redis stream before each test
       const streamKey = getSessionStreamKey({ sessionId });
-      await redis.del(streamKey);
-    });
-
-    afterEach(async () => {
-      await redis.quit();
+      await redisSetup.client.del(streamKey);
     });
 
     it("should return false when hasActiveStream is false", async () => {
@@ -417,8 +443,8 @@ describe("AgentSession", () => {
       const streamKey = getSessionStreamKey({ sessionId });
       
       // Add recent chunks (current timestamp)
-      await redis.xAdd(streamKey, "*", { type: "stream-chunk", data: JSON.stringify({ type: "text-start", id: "msg-1" }) });
-      await redis.xAdd(streamKey, "*", { type: "stream-chunk", data: JSON.stringify({ type: "text-delta", id: "msg-1", delta: "Hello" }) });
+      await redisSetup.client.xAdd(streamKey, "*", { type: "stream-chunk", data: JSON.stringify({ type: "text-start", id: "msg-1" }) });
+      await redisSetup.client.xAdd(streamKey, "*", { type: "stream-chunk", data: JSON.stringify({ type: "text-delta", id: "msg-1", delta: "Hello" }) });
 
       const sessionRepo = dataSource.getRepository(AgentSessionEntity);
       await sessionRepo.save({
@@ -450,9 +476,9 @@ describe("AgentSession", () => {
       // Add chunks with old timestamp (more than 60 seconds ago)
       // Redis xAdd accepts timestamp-sequence format for the ID
       const staleTimestamp = Date.now() - 61 * 1000; // 61 seconds ago
-      await redis.xAdd(streamKey, `${staleTimestamp}-0`, { type: "stream-chunk", data: JSON.stringify({ type: "text-start", id: "msg-1" }) });
-      await redis.xAdd(streamKey, `${staleTimestamp}-1`, { type: "stream-chunk", data: JSON.stringify({ type: "text-delta", id: "msg-1", delta: "Hello" }) });
-      await redis.xAdd(streamKey, `${staleTimestamp}-2`, { type: "stream-chunk", data: JSON.stringify({ type: "text-end", id: "msg-1" }) });
+      await redisSetup.client.xAdd(streamKey, `${staleTimestamp}-0`, { type: "stream-chunk", data: JSON.stringify({ type: "text-start", id: "msg-1" }) });
+      await redisSetup.client.xAdd(streamKey, `${staleTimestamp}-1`, { type: "stream-chunk", data: JSON.stringify({ type: "text-delta", id: "msg-1", delta: "Hello" }) });
+      await redisSetup.client.xAdd(streamKey, `${staleTimestamp}-2`, { type: "stream-chunk", data: JSON.stringify({ type: "text-end", id: "msg-1" }) });
 
       const sessionRepo = dataSource.getRepository(AgentSessionEntity);
       await sessionRepo.save({
@@ -482,7 +508,7 @@ describe("AgentSession", () => {
       expect(extractTextFromMessage(updatedEntity?.uiMessages[0] as TypedUIMessage)).toBe("Hello");
       
       // Verify Redis stream was deleted
-      const chunks = await redis.xRange(streamKey, "-", "+");
+      const chunks = await redisSetup.client.xRange(streamKey, "-", "+");
       expect(chunks).toHaveLength(0);
     });
 
@@ -492,9 +518,9 @@ describe("AgentSession", () => {
       
       // Add stale chunks
       const staleTimestamp = Date.now() - 61 * 1000;
-      await redis.xAdd(streamKey, `${staleTimestamp}-0`, { type: "stream-chunk", data: JSON.stringify({ type: "text-start", id: "msg-2" }) });
-      await redis.xAdd(streamKey, `${staleTimestamp}-1`, { type: "stream-chunk", data: JSON.stringify({ type: "text-delta", id: "msg-2", delta: "New message" }) });
-      await redis.xAdd(streamKey, `${staleTimestamp}-2`, { type: "stream-chunk", data: JSON.stringify({ type: "text-end", id: "msg-2" }) });
+      await redisSetup.client.xAdd(streamKey, `${staleTimestamp}-0`, { type: "stream-chunk", data: JSON.stringify({ type: "text-start", id: "msg-2" }) });
+      await redisSetup.client.xAdd(streamKey, `${staleTimestamp}-1`, { type: "stream-chunk", data: JSON.stringify({ type: "text-delta", id: "msg-2", delta: "New message" }) });
+      await redisSetup.client.xAdd(streamKey, `${staleTimestamp}-2`, { type: "stream-chunk", data: JSON.stringify({ type: "text-end", id: "msg-2" }) });
 
       const sessionRepo = dataSource.getRepository(AgentSessionEntity);
       await sessionRepo.save({
