@@ -40,7 +40,7 @@ describe("Chatbot", () => {
   });
 
   beforeEach(() => {
-    project = new Project("Test project");
+    project = new Project();
   });
 
   describe("create", () => {

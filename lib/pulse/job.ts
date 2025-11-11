@@ -207,13 +207,13 @@ export class PulseJobScheduler {
 
     try {
       // Create a project for the chatbot using the pulse config prompt
-      const project = new Project(config.prompt, `pulse-${job.id}`);
+      const project = new Project();
 
       // Create chatbot instance
       const chatbot = await Chatbot.create(project);
 
       // Invoke chatbot with the configured prompt
-      const stream = chatbot.stream({
+      const stream = await chatbot.chat({
         messages: [
           {
             role: "user",

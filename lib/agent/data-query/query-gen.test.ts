@@ -28,7 +28,7 @@ describeIf(
   });
 
   beforeEach(() => {
-    project = new Project("test-project");
+    project = new Project();
     dbClient = new DatabaseClient(getSQLiteTestDataSource());
   });
 

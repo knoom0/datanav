@@ -1,16 +1,21 @@
 "use client";
 
-import { UseChatHelpers, UIMessage } from "@ai-sdk/react";
 import { ActionIcon, Box, Group, Paper, Stack, Textarea } from "@mantine/core";
 import { IconPlayerPlay, IconPlayerStop } from "@tabler/icons-react";
 import React, { useState } from "react";
 
-interface AgentInputProps<T extends UIMessage = UIMessage> {
-  useChatHelpers: UseChatHelpers<T>;
+import { ChatStatus } from "@/lib/types";
+
+export type { ChatStatus };
+
+interface AgentInputProps {
+  onSubmit: (params: { text: string }) => void;
+  onStop: () => void;
+  status: ChatStatus;
+  placeholder?: string;
 }
 
-export const AgentInput = <T extends UIMessage = UIMessage>({ useChatHelpers }: AgentInputProps<T>) => {
-  const { sendMessage, status, stop } = useChatHelpers;
+export const AgentInput = ({ onSubmit, onStop, status, placeholder = "Type your prompt..." }: AgentInputProps) => {
   const [input, setInput] = useState("");
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -20,9 +25,11 @@ export const AgentInput = <T extends UIMessage = UIMessage>({ useChatHelpers }: 
   const submit = (e?: React.FormEvent<HTMLFormElement>) => {
     e?.preventDefault();
     if (!input?.trim()) return;
-    sendMessage({ text: input });
+    onSubmit({ text: input });
     setInput("");
   };
+
+  const isDisabled = status === "submitted";
 
   return (
     <Paper mx={0} my="sm" px="lg" py="xs" radius="lg" shadow="xs" withBorder>
@@ -34,7 +41,7 @@ export const AgentInput = <T extends UIMessage = UIMessage>({ useChatHelpers }: 
             maxRows={4}
             value={input}
             onChange={handleInputChange}
-            placeholder="Type your message..."
+            placeholder={placeholder}
             style={{ flex: 1, outline: "none" }}
             size="md"
             onKeyUp={(e) => {
@@ -44,11 +51,17 @@ export const AgentInput = <T extends UIMessage = UIMessage>({ useChatHelpers }: 
               }
             }}
             variant="unstyled"
+            readOnly={isDisabled}
+            styles={{
+              input: {
+                cursor: isDisabled ? "default" : "text"
+              }
+            }}
           />
           <Group>
             <Box style={{flexGrow: 1}} />
             {(status === "submitted" || status === "streaming") && (
-              <ActionIcon size="lg" radius="xl" variant="default" onClick={stop}>
+              <ActionIcon size="lg" radius="xl" variant="default" onClick={onStop}>
                 <IconPlayerStop />
               </ActionIcon>
             )}

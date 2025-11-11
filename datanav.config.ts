@@ -42,13 +42,13 @@ export const config = {
     }
   },
 
-  github: {
-    repo: "knoom0/datanav",
-  },
-
   email: {
     sender: "noreply@datanav.app",
     senderName: "DataNav"
+  },
+
+  github: {
+    repo: "knoom0/datanav",
   },
 
   hosting: {
@@ -57,6 +57,11 @@ export const config = {
 
   job: {
     maxJobDurationMs: 60000,
+  },
+
+  model: {
+    small: "openai:gpt-4o-mini",
+    embedding: "openai:text-embedding-3-small",
   },
 
   packages: {
@@ -77,5 +82,9 @@ export const config = {
     "@tabler/icons-react": TablerIcons,
     "@heroicons/react/24/solid": HeroIconsSolid,
     "@heroicons/react/24/outline": HeroIconsOutline,
+  },
+
+  redis: {
+    url: process.env.REDIS_URL || "redis://localhost:6379",
   },
 };

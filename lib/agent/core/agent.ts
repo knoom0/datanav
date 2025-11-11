@@ -171,8 +171,11 @@ export type EvalParams = {
 };
 
 export interface EvoAgent {
-  readonly project: Project;
-  stream(params: StreamParams): UIMessageStream;
+  // TODO: Consider making project readonly to prevent unintended mutations
+  // Changed from readonly to mutable to support session-based project updates
+  // Evaluate if getter/setter with validation would provide better encapsulation
+  project: Project;
+  chat(params: StreamParams): UIMessageStream;
 }
 
 export type IterationResult = {
@@ -183,17 +186,25 @@ export type IterationResult = {
 };
 
 export abstract class EvoAgentBase implements EvoAgent {
-  readonly project: Project;
+  private _project: Project;
   protected readonly maxIterations: number;
 
   constructor({ project, maxIterations = 1 }: { project: Project; maxIterations?: number }) {
-    this.project = project;
+    this._project = project;
     this.maxIterations = maxIterations;
+  }
+
+  get project(): Project {
+    return this._project;
+  }
+
+  set project(value: Project) {
+    this._project = value;
   }
 
   abstract iterate(params: { messages: ModelMessage[], writer: UIMessageStreamWriter, iteration: number }): Promise<IterationResult>;
 
-  stream(params: StreamParams): UIMessageStream {
+  chat(params: StreamParams): UIMessageStream {
     const { messages, onFinish, onError } = params;
     
     // Get the last message text for trace input
@@ -288,33 +299,39 @@ export abstract class EvoAgentBase implements EvoAgent {
 }
 
 
+
 /**
  * Options for pipeUIMessageStream function
  */
 export type PipeUIMessageStreamOptions = {
   /** Whether to omit "start" and "finish" type messages when piping the stream (default false) */
   omitStartFinish?: boolean;
+  /** Optional callback to process each chunk before writing to target */
+  onChunk?: (chunk: InferUIMessageChunk<UIMessage>) => Promise<void> | void;
 };
 
 /**
  * Pipes UIMessage stream data from a source stream to a target stream until completion
- * @param source The source UIMessageStream
- * @param target The target UIMessageStreamWriter
- * @param options Optional configuration for piping behavior
  * @returns Promise that resolves when the source stream is fully consumed
  */
-export async function pipeUIMessageStream(
-  source: UIMessageStream, 
-  target: UIMessageStreamWriter,
-  options: PipeUIMessageStreamOptions = {}
-): Promise<void> {
-  const { omitStartFinish = false } = options;
+export async function pipeUIMessageStream(params: {
+  source: UIMessageStream;
+  target: UIMessageStreamWriter;
+  omitStartFinish?: boolean;
+  onChunk?: (chunk: InferUIMessageChunk<UIMessage>) => Promise<void> | void;
+}): Promise<void> {
+  const { source, target, omitStartFinish = false, onChunk } = params;
   const reader = source.getReader();
   try {
      
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
+      
+      // Call onChunk callback if provided
+      if (onChunk) {
+        await onChunk(value);
+      }
       
       // Filter out start/finish messages and metadata if requested
       if (omitStartFinish && (value.type === "start" || value.type === "finish" || value.type === "message-metadata")) {
@@ -376,7 +393,7 @@ export class EvoAgentChain implements EvoAgent {
     if (agents.length === 0) throw new Error("EvoAgentChain requires at least one agent");
   }
 
-  stream({messages, onFinish, onError}: StreamParams): UIMessageStream {
+  chat({messages, onFinish, onError}: StreamParams): UIMessageStream {
     return createUIMessageStream({
       execute: async ({ writer }: { writer: UIMessageStreamWriter }) => {
         const agents = [...this.agents];
@@ -390,7 +407,7 @@ export class EvoAgentChain implements EvoAgent {
           if (agentResult) {
             agentResult = null;
           }
-          const res = agent.stream({
+          const res = await agent.chat({
             messages,
             onFinish: ({ result, nextAction }) => {
               agentResult = result;
@@ -408,7 +425,7 @@ export class EvoAgentChain implements EvoAgent {
             }
           });
 
-          await pipeUIMessageStream(res, writer, { omitStartFinish: true });
+          await pipeUIMessageStream({ source: res, target: writer, omitStartFinish: true });
 
           if (agentError) {
             onError?.(agentError);

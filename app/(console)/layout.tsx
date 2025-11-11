@@ -5,19 +5,21 @@ import "@mantine/core/styles.css";
 import "@mantine/charts/styles.css";
 import "@gfazioli/mantine-split-pane/styles.css";
 
-import { AppShell, AppShellHeader, AppShellMain, AppShellNavbar, Burger, Group, MantineProvider, Text, ActionIcon, Stack, ScrollArea, Image } from "@mantine/core";
+import { AppShell, AppShellHeader, AppShellMain, AppShellNavbar, Burger, Group, MantineProvider, Text, ActionIcon, Stack, ScrollArea, Image, Divider } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
-import { IconBuilding, IconDatabase, IconComponents, IconPlus, IconClock } from "@tabler/icons-react";
+import { IconBuilding, IconDatabase, IconPlus, IconClock, IconBook, IconBrain } from "@tabler/icons-react";
 import Link from "next/link";
 
 import { AppTitleProvider, useAppTitle } from "@/components/app-title-context";
+import { ChatSessionList } from "@/components/chat-session-list";
 import { UserProfile } from "@/components/user-profile";
 
 const navbarConfig = [
   { icon: <IconBuilding size={24} />, label: "New Chat", href: "/chat" },
   { icon: <IconClock size={24} />, label: "Pulse", href: "/pulse" },
   { icon: <IconDatabase size={24} />, label: "Data", href: "/data" },
-  { icon: <IconComponents size={24} />, label: "Components", href: "/components" },
+  { icon: <IconBook size={24} />, label: "Playbook", href: "/playbook" },
+  { icon: <IconBrain size={24} />, label: "Strategist", href: "/strategist" },
 ];
 
 function ConsoleLayout({
@@ -85,8 +87,11 @@ function ConsoleLayout({
                   </Link>
                 </Group>
               ))}
+              <Divider my="md" />
+              <ChatSessionList onItemClick={handleNavItemClick} />
             </Stack>
           </ScrollArea>
+          <Divider />
           <UserProfile />
         </Stack>
       </AppShellNavbar>

@@ -33,7 +33,14 @@ export interface Config {
   job: {
     maxJobDurationMs: number;
   };
+  model: {
+    small: string;
+    embedding: string;
+  };
   packages: Record<string, any>;
+  redis: {
+    url: string;
+  };
 }
 
 // Function to build config with environment variable overrides
@@ -52,7 +59,8 @@ function buildConfig(rawConfig: any) {
     DATANAV_DATABASE_SSL: "database.ssl",
     DATANAV_EMAIL_SENDER: "email.sender",
     DATANAV_EMAIL_SENDER_NAME: "email.senderName",
-    DATANAV_HOSTING_ENABLED: "hosting.enabled"
+    DATANAV_HOSTING_ENABLED: "hosting.enabled",
+    REDIS_URL: "redis.url"
   };
   
   // Check each environment variable and apply overrides
@@ -89,6 +97,25 @@ export function getConfig(): Config {
     cachedConfig = buildConfig(rawConfig) as Config;
   }
   return cachedConfig;
+}
+
+/**
+ * Update a config value dynamically
+ * Useful for testing to override config values
+ * @param path Dot-separated path to the config key (e.g., "redis.url")
+ * @param value The value to set
+ */
+export function updateConfig(path: string, value: any): void {
+  const config = getConfig();
+  setValue(config, path, value);
+}
+
+/**
+ * Reset the config cache
+ * Useful for testing to restore original config
+ */
+export function resetConfig(): void {
+  cachedConfig = null;
 }
 
 export const defaultAgentConfig = () => getConfig().agent;

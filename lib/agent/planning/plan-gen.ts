@@ -101,7 +101,7 @@ export class PlanGen extends EvoAgentBase {
       }
     });
     
-    await pipeUIMessageStream(res.toUIMessageStream(), writer, { omitStartFinish: true });
+    await pipeUIMessageStream({ source: res.toUIMessageStream(), target: writer, omitStartFinish: true });
     
     if (error) {
       throw error;

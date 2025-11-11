@@ -10,7 +10,7 @@ describe("PlanGen", () => {
   let mockDbClient: DatabaseClient;
 
   beforeEach(() => {
-    project = new Project("Test project for dashboard");
+    project = new Project();
     mockDbClient = {
       getTableInfo: vi.fn().mockResolvedValue([]),
       query: vi.fn().mockResolvedValue([])
@@ -39,7 +39,7 @@ describe("PlanGen", () => {
   test("should extend EvoAgentBase and have iterate method", () => {
     expect(planGen).toHaveProperty("iterate");
     expect(typeof planGen.iterate).toBe("function");
-    expect(planGen).toHaveProperty("stream");
-    expect(typeof planGen.stream).toBe("function");
+    expect(planGen).toHaveProperty("chat");
+    expect(typeof planGen.chat).toBe("function");
   });
 });

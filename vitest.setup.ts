@@ -6,6 +6,9 @@ import { beforeAll, vi } from "vitest"
 
 import logger from "@/lib/logger"
 
+// Ensure hosting is disabled for tests to avoid authentication issues
+process.env.DATANAV_HOSTING_ENABLED = "false"
+
 // Mock server-only to allow importing server modules in tests
 vi.mock("server-only", () => ({}))
 

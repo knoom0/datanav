@@ -52,9 +52,29 @@ export interface MessageMetadata {
 }
 
 /**
+ * Information about an agent session
+ */
+export interface AgentSessionInfo {
+  id: string;
+  title: string | null;
+  hasProject: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
  * Typed UIMessage with metadata
  */
 export type TypedUIMessage = UIMessage<MessageMetadata>;
+
+/**
+ * Chat status type for managing chat UI state
+ * - ready: Ready to accept new input
+ * - submitted: Message has been sent, awaiting response
+ * - streaming: Response is actively streaming
+ * - error: An error occurred
+ */
+export type ChatStatus = "ready" | "submitted" | "streaming" | "error";
 
 // ActionableError is a base class for errors that can be handled by the agent
 export class ActionableError extends Error {}
@@ -191,6 +211,26 @@ export interface ColumnInfo {
 }
 
 /**
+ * Agent strategy for the playbook system
+ */
+export interface AgentStrategy {
+  /** Unique identifier (only present for stored strategies) */
+  id?: number;
+  /** Name of the agent this strategy is for */
+  agentName: string;
+  /** Topic or title of the strategy */
+  topic: string;
+  /** Strategy text content */
+  text: string;
+  /** Sample prompts related to this topic */
+  samplePrompts?: string[];
+  /** Creation timestamp (only present for stored strategies) */
+  createdAt?: Date;
+  /** Last update timestamp (only present for stored strategies) */
+  updatedAt?: Date;
+}
+
+/**
  * Base class for all artifacts with proper type discrimination
  */
 export interface BaseArtifact {
@@ -265,6 +305,11 @@ export interface UIBundle extends BaseArtifact {
   dataSpec: DataSpec;
 }
 
+export interface Strategy extends BaseArtifact {
+  type: "strategy";
+  text: string;
+}
+
 export type Artifact =
   | PRD
   | Design
@@ -272,22 +317,19 @@ export type Artifact =
   | Code
   | Report
   | ReportBundle
-  | UIBundle;
+  | UIBundle
+  | Strategy;
 
 /**
  * Project represents a collection of artifacts and context for EvoAgents to work with.
  * It manages the lifecycle and organization of artifacts produced during the generation process.
  */
 export class Project {
-  readonly id: string;
-  prompt: string;
   readonly createdAt: Date;
   updatedAt: Date;
   private artifacts: Map<string, Artifact>;
 
-  constructor(prompt: string, id?: string) {
-    this.id = id ?? generateId();
-    this.prompt = prompt;
+  constructor() {
     this.createdAt = new Date();
     this.updatedAt = new Date();
     this.artifacts = new Map();
@@ -344,8 +386,6 @@ export class Project {
    */
   toJSON(): any {
     return {
-      id: this.id,
-      prompt: this.prompt,
       createdAt: this.createdAt.toISOString(),
       updatedAt: this.updatedAt.toISOString(),
       artifacts: this.getAllArtifacts()
@@ -356,7 +396,7 @@ export class Project {
    * Create a Project instance from serialized JSON data
    */
   static fromJSON(data: any): Project {
-    const project = new Project(data.prompt, data.id);
+    const project = new Project();
     (project as any).createdAt = new Date(data.createdAt);
     project.updatedAt = new Date(data.updatedAt);
     
@@ -381,11 +421,4 @@ export function areSpecsEqual(a: UIBundle, b: UIBundle): boolean {
     JSON.stringify(a.sourceMap) === JSON.stringify(b.sourceMap) &&
     JSON.stringify(a.dataSpec) === JSON.stringify(b.dataSpec)
   );
-}
-
-function generateId(): string {
-  if (typeof crypto !== "undefined" && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-  return Math.random().toString(36).slice(2) + Date.now();
 }

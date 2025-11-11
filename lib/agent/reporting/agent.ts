@@ -234,7 +234,7 @@ export class ReportingAgent extends EvoAgentBase {
       stopWhen: stepCountIs(MAX_STEPS),
     });
 
-    await pipeUIMessageStream(res.toUIMessageStream(), writer, { omitStartFinish: true });
+    await pipeUIMessageStream({ source: res.toUIMessageStream(), target: writer, omitStartFinish: true });
     
     if (error) {
       throw error;

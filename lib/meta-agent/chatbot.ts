@@ -10,7 +10,7 @@ import { Project } from "@/lib/types";
 import { filterUserMessages } from "@/lib/util/message-util";
 
 export class Chatbot extends EvoAgentChain {
-  private constructor({
+  constructor({
     dbClient,
     project,
     dataCatalog,
@@ -29,14 +29,14 @@ export class Chatbot extends EvoAgentChain {
   }
 
   /**
-   * Override stream method to filter out non-user messages
+   * Override chat method to filter out non-user messages
    */
-  stream(params: StreamParams): UIMessageStream {
+  chat(params: StreamParams): UIMessageStream {
     const filteredParams = {
       ...params,
       messages: filterUserMessages(params.messages)
     };
-    return super.stream(filteredParams);
+    return super.chat(filteredParams);
   }
 
   /**
@@ -44,19 +44,10 @@ export class Chatbot extends EvoAgentChain {
    * Initializes database client and data catalog
    */
   static async create(project: Project): Promise<Chatbot> {
-    // Get the global data source (this ensures it"s initialized)
     const dataSource = await getUserDataSource();
-    
-    // Use the data source to create the database client
     const dbClient = new DatabaseClient(dataSource);
-    
-    // Create data catalog with default configuration
-    const dataCatalog = new DataCatalog({ 
-      dataSource: dataSource
-    });
+    const dataCatalog = new DataCatalog({ dataSource });
 
-
-    // Create Chatbot instance
     return new Chatbot({
       dbClient,
       project,

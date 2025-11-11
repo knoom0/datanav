@@ -1,12 +1,13 @@
 import "server-only";
 import "reflect-metadata";
 
-import { DataSource, Entity, PrimaryColumn, PrimaryGeneratedColumn, Column, BaseEntity, type DataSourceOptions, Unique, CreateDateColumn, UpdateDateColumn } from "typeorm";
+import { DataSource, Entity, PrimaryColumn, PrimaryGeneratedColumn, Column, BaseEntity, type DataSourceOptions, Unique } from "typeorm";
 
 import { getUserDataSourceOptions } from "@/lib/hosting/user-database";
 import logger from "@/lib/logger";
-import type { DataSpec } from "@/lib/types";
+import type { DataSpec, TypedUIMessage } from "@/lib/types";
 import { getCurrentUserId } from "@/lib/util/auth-util";
+import { CreateDateColumnUTC, UpdateDateColumnUTC } from "@/lib/util/database-util";
 import { createSchemaIfNotExist } from "@/lib/util/db-util";
 import { safeErrorString } from "@/lib/util/log-util";
 
@@ -37,10 +38,10 @@ export class ComponentInfoEntity extends BaseEntity {
   @Column({ type: "json" })
     keywords!: string[];
 
-  @CreateDateColumn()
+  @CreateDateColumnUTC()
     createdAt!: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumnUTC()
     updatedAt!: Date;
 }
 
@@ -70,10 +71,10 @@ export class DataConnectorConfigEntity extends BaseEntity {
   @Column({ type: "json", nullable: true })
     dataLoaderConfig!: Record<string, any> | null;
 
-  @CreateDateColumn()
+  @CreateDateColumnUTC()
     createdAt!: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumnUTC()
     updatedAt!: Date;
 }
 
@@ -118,10 +119,10 @@ export class DataConnectorStatusEntity extends BaseEntity {
   @Column({ type: Date, nullable: true })
     askedToConnectUntil!: Date | null;
 
-  @CreateDateColumn()
+  @CreateDateColumnUTC()
     createdAt!: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumnUTC()
     updatedAt!: Date;
 }
 
@@ -163,10 +164,10 @@ export class DataJobEntity extends BaseEntity {
   @Column({ type: Date, nullable: true })
     finishedAt!: Date | null;
 
-  @CreateDateColumn()
+  @CreateDateColumnUTC()
     createdAt!: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumnUTC()
     updatedAt!: Date;
 }
 
@@ -200,10 +201,10 @@ export class DataTableStatusEntity extends BaseEntity {
   @Column({ type: Date, nullable: true })
     lastSyncedAt!: Date | null;
 
-  @CreateDateColumn()
+  @CreateDateColumnUTC()
     createdAt!: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumnUTC()
     updatedAt!: Date;
 }
 
@@ -240,10 +241,10 @@ export class PulseConfigEntity extends BaseEntity {
   @Column({ type: Date, nullable: true })
     nextRunAt!: Date | null;
 
-  @CreateDateColumn()
+  @CreateDateColumnUTC()
     createdAt!: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumnUTC()
     updatedAt!: Date;
 }
 
@@ -305,10 +306,10 @@ export class PulseJobEntity extends BaseEntity {
   @Column({ type: Date, nullable: true })
     finishedAt!: Date | null;
 
-  @CreateDateColumn()
+  @CreateDateColumnUTC()
     createdAt!: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumnUTC()
     updatedAt!: Date;
 }
 
@@ -328,10 +329,10 @@ export class ReportBundleEntity extends BaseEntity {
       }>;
     };
 
-  @CreateDateColumn()
+  @CreateDateColumnUTC()
     createdAt!: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumnUTC()
     updatedAt!: Date;
 }
 
@@ -361,6 +362,47 @@ export type DataRecord = {
   [key: string]: any;
 };
 
+@Entity({ name: "agent_session", schema: SCHEMA_NAME })
+export class AgentSessionEntity extends BaseEntity {
+  @PrimaryColumn({ type: "varchar" })
+    id!: string;
+
+  @Column({ type: "json" })
+    uiMessages!: TypedUIMessage[];
+
+  /**
+   * Optional title for the session, displayed in the UI
+   */
+  @Column({ type: "varchar", nullable: true })
+    title!: string | null;
+
+  /**
+   * Flag indicating if there is an active stream.
+   * When true, message chunks are being stored in Redis.
+   * When false or null, there is no active stream.
+   */
+  @Column({ type: "boolean", default: false })
+    hasActiveStream!: boolean;
+
+  /**
+   * The agent name associated with this session (e.g., "chatbot", "strategist", "dashbot")
+   */
+  @Column({ type: "varchar", nullable: true })
+    agentName!: string | null;
+
+  /**
+   * The agent configuration for this session, stored as JSON
+   */
+  @Column({ type: "json", nullable: true })
+    agentConfig!: Record<string, any> | null;
+
+  @CreateDateColumnUTC()
+    createdAt!: Date;
+
+  @UpdateDateColumnUTC()
+    updatedAt!: Date;
+}
+
 export const ENTITIES = [
   ComponentInfoEntity,
   DataConnectorConfigEntity,
@@ -371,13 +413,15 @@ export const ENTITIES = [
   PulseConfigEntity,
   PulseJobEntity,
   ReportBundleEntity,
-  UIBundleEntity
+  UIBundleEntity,
+  AgentSessionEntity
 ] as const;
 
 // Common database options shared across all user data sources
 const COMMON_DATABASE_OPTIONS = {
   entities: [...ENTITIES],
   synchronize: true,
+  timezone: "UTC",
 };
 
 // Cache for user-specific data sources
@@ -418,7 +462,6 @@ async function createFullTextSearchIndexesForUser(userDataSource: DataSource) {
     logger.warn(`Failed to create full-text search indexes for user: ${safeErrorString(error)}`);
   }
 }
-
 
 export async function getUserDataSource(): Promise<DataSource> {
   // Get current user ID from Supabase authentication

@@ -29,7 +29,7 @@ describeIf(
     let projectConfig: ProjectConfig;
 
     beforeEach(() => {
-      project = new Project("test-design-project");
+      project = new Project();
       projectConfig = {
         screenSize: { width: 375, height: 812 },
         deviceType: "mobile",
