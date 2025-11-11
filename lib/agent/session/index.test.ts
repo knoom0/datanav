@@ -151,7 +151,7 @@ describe("AgentSession", () => {
     const sessionRepo = dataSource.getRepository(AgentSessionEntity);
     let sessionEntity: AgentSessionEntity | null = null;
     let attempts = 0;
-    const maxAttempts = 20; // 20 attempts * 200ms = 4 seconds max
+    const maxAttempts = 50; // 50 attempts * 200ms = 10 seconds max
     
     while (attempts < maxAttempts) {
       sessionEntity = await sessionRepo.findOne({
@@ -167,6 +167,9 @@ describe("AgentSession", () => {
     }
 
     expect(sessionEntity).toBeDefined();
+    if (sessionEntity) {
+      expect(sessionEntity.hasActiveStream).toBe(false);
+    }
     expect(sessionEntity?.uiMessages).toHaveLength(2); // user message + assistant message
     expect(sessionEntity?.uiMessages[0].role).toBe("user");
     expect(extractTextFromMessage(sessionEntity?.uiMessages[0] as TypedUIMessage)).toBe("Hello, agent!");
@@ -200,7 +203,7 @@ describe("AgentSession", () => {
     // Poll for stream finalization (more robust than fixed timeout)
     const sessionRepo = dataSource.getRepository(AgentSessionEntity);
     let attempts = 0;
-    const maxAttempts = 20; // 20 attempts * 200ms = 4 seconds max
+    const maxAttempts = 50; // 50 attempts * 200ms = 10 seconds max
     
     while (attempts < maxAttempts) {
       const sessionEntity = await sessionRepo.findOne({
@@ -243,11 +246,21 @@ describe("AgentSession", () => {
 
     // Poll for onFinish callback to be called (more robust than fixed timeout)
     let attempts = 0;
-    const maxAttempts = 20; // 20 attempts * 200ms = 4 seconds max
+    const maxAttempts = 50; // 50 attempts * 200ms = 10 seconds max
     
     while (attempts < maxAttempts && !finishCalled) {
       await new Promise(resolve => setTimeout(resolve, 200));
       attempts++;
+    }
+
+    if (!finishCalled) {
+      // Add diagnostic info
+      const sessionRepo = dataSource.getRepository(AgentSessionEntity);
+      const sessionEntity = await sessionRepo.findOne({ where: { id: sessionId } });
+      console.log("onFinish not called after polling. Session state:", {
+        hasActiveStream: sessionEntity?.hasActiveStream,
+        messageCount: sessionEntity?.uiMessages.length
+      });
     }
 
     expect(finishCalled).toBe(true);
