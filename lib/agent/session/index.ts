@@ -33,6 +33,12 @@ export type RedisStreamMessageType = "stream-chunk" | "stream-end";
  * - Once streaming completes (onFinish), chunks are read from Redis and converted to a UIMessage
  * - The UIMessage is then merged into uiMessages array in the database
  * 
+ * Security & Ownership:
+ * - Sessions are stored in user-specific data sources (via getUserDataSource())
+ * - Each user has their own isolated database schema
+ * - Session ownership is inherently enforced by the data source isolation
+ * - No additional user_id filtering is needed at the AgentSession level
+ * 
  * Factory Methods:
  * - AgentSession.create() - Creates a new session with agent config and saves to DB
  * - AgentSession.get() - Loads an existing session from DB
@@ -70,7 +76,7 @@ export class AgentSession {
    * Create a new AgentSession and save it to the database
    * 
    * @param params.sessionId - Unique session identifier
-   * @param params.dataSource - TypeORM data source for persistence
+   * @param params.dataSource - TypeORM data source for persistence (user-specific, provides isolation)
    * @param params.agentName - The agent name for this session
    * @param params.agentConfig - The agent configuration for this session
    */
@@ -105,16 +111,8 @@ export class AgentSession {
   /**
    * Get an existing AgentSession by loading it from the database
    * 
-   * TODO: Add session ownership verification - SECURITY ISSUE
-   * Currently any authenticated user can access any session by ID.
-   * Need to:
-   * 1. Add user_id field to AgentSessionEntity
-   * 2. Accept userId parameter and filter queries by it
-   * 3. Verify session ownership before returning session data
-   * See GitHub Copilot review comment for details.
-   * 
    * @param params.sessionId - Unique session identifier
-   * @param params.dataSource - TypeORM data source for persistence
+   * @param params.dataSource - TypeORM data source for persistence (user-specific, provides isolation)
    */
   static async get(params: {
     sessionId: string;
