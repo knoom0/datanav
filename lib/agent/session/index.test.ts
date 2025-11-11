@@ -1,11 +1,13 @@
-import { ModelMessage } from "ai";
+import { ModelMessage, createUIMessageStream, consumeStream } from "ai";
 import { DataSource } from "typeorm";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 
 import { EvoAgent, StreamParams, UIMessageStream } from "@/lib/agent/core/agent";
 import { AgentSessionEntity, getUserDataSource } from "@/lib/entities";
 import { registerAgentClass } from "@/lib/meta-agent";
-import { Project } from "@/lib/types";
+import { Project, TypedUIMessage } from "@/lib/types";
+import { extractTextFromMessage, streamToArray } from "@/lib/util/message-util";
+import { getRedisClient, getSessionStreamKey } from "@/lib/util/redis-util";
 
 import { AgentSession } from "./index";
 
@@ -19,18 +21,20 @@ class MockAgent implements EvoAgent {
     this.project = project;
   }
 
-  stream(params: StreamParams): UIMessageStream {
+  chat(params: StreamParams): UIMessageStream {
     this.streamCallCount++;
     this.lastMessages = params.messages;
 
-    // Create a simple mock stream that returns text
-    const encoder = new TextEncoder();
-    return new ReadableStream({
-      async start(controller) {
-        // Write start message
-        controller.enqueue(encoder.encode("0:\"Mock response\"\n"));
-        
-        // Call onFinish
+    // Use createUIMessageStream to create a proper UIMessageStream
+    return createUIMessageStream({
+      execute: async ({ writer }) => {
+        // Write text delta chunks
+        writer.write({ type: "text-start", id: "msg-1" });
+        writer.write({ type: "text-delta", delta: "Mock response", id: "msg-1" });
+        writer.write({ type: "text-end", id: "msg-1" });
+      },
+      onFinish: async () => {
+        // Call original onFinish if provided
         params.onFinish?.({
           result: {
             response: {
@@ -39,10 +43,13 @@ class MockAgent implements EvoAgent {
           },
           writer: {} as any
         });
-        
-        controller.close();
+      },
+      onError: (error) => {
+        // Call original onError if provided
+        params.onError?.(error);
+        return typeof error === "string" ? error : "Mock error";
       }
-    }) as any;
+    });
   }
 }
 
@@ -77,8 +84,7 @@ describe("AgentSession", () => {
       agentName: "mock",
       agentConfig: {},
       sessionId,
-      dataSource,
-      initialPrompt: "Test prompt"
+      dataSource
     });
 
     expect(session).toBeDefined();
@@ -87,7 +93,6 @@ describe("AgentSession", () => {
     const sessionRepo = dataSource.getRepository(AgentSessionEntity);
     const sessionEntity = await sessionRepo.findOne({ where: { id: sessionId } });
     expect(sessionEntity).toBeDefined();
-    expect(sessionEntity?.project).toBeDefined();
   });
 
   it("should persist messages after streaming", async () => {
@@ -95,35 +100,24 @@ describe("AgentSession", () => {
       agentName: "mock",
       agentConfig: {},
       sessionId,
-      dataSource,
-      initialPrompt: "Test prompt"
+      dataSource
     });
 
-    const userMessages: ModelMessage[] = [
+    const userMessages: TypedUIMessage[] = [
       {
+        id: "msg-1",
         role: "user",
-        content: "Hello, agent!"
+        parts: [{ type: "text", text: "Hello, agent!" }]
       }
     ];
 
     // Stream with the session wrapper
-    const stream = await session.stream({
-      messages: userMessages
+    const stream = session.chat({
+      uiMessages: userMessages
     });
 
     // Consume the stream
-    const reader = stream.getReader();
-    while (true) {
-      const { done } = await reader.read();
-      if (done) break;
-    }
-    reader.releaseLock();
-
-    // Save the last stream
-    await session.saveLastStream();
-
-    // Wait a bit for async operations to complete
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await consumeStream({ stream });
 
     // Verify messages were persisted
     const sessionRepo = dataSource.getRepository(AgentSessionEntity);
@@ -132,96 +126,11 @@ describe("AgentSession", () => {
     });
 
     expect(sessionEntity).toBeDefined();
-    expect(sessionEntity?.messages).toHaveLength(2); // user message + assistant message
-    expect(sessionEntity?.messages[0].role).toBe("user");
-    expect(sessionEntity?.messages[0].content).toBe("Hello, agent!");
-    expect(sessionEntity?.messages[1].role).toBe("assistant");
-    expect(sessionEntity?.messages[1].content).toBe("Mock response");
-
-    // Verify project was persisted
-    expect(sessionEntity?.project).toBeDefined();
-  });
-
-  it("should load existing project and use it", async () => {
-    // Pre-populate session with project and messages
-    const sessionRepo = dataSource.getRepository(AgentSessionEntity);
-    const existingProject = new Project();
-    existingProject.put({
-      type: "report",
-      title: "Test Report",
-      content: "Report content"
-    } as any);
-
-    await sessionRepo.save({
-      id: sessionId,
-      messages: [
-        {
-          role: "user",
-          content: "First message"
-        },
-        {
-          role: "assistant",
-          content: "First response"
-        }
-      ],
-      project: {
-        createdAt: existingProject.createdAt,
-        updatedAt: existingProject.updatedAt,
-        artifacts: existingProject.toJSON().artifacts
-      }
-    });
-
-    // Load the session using AgentSession.get
-    const session = await AgentSession.get({
-      agentName: "mock",
-      sessionId,
-      dataSource
-    });
-
-    // Verify the project was loaded with artifacts
-    expect(session.project.toJSON().artifacts["artifact-1"]).toBeDefined();
-
-    // Client sends all messages (including history) + new message
-    const allMessages: ModelMessage[] = [
-      {
-        role: "user",
-        content: "First message"
-      },
-      {
-        role: "assistant",
-        content: "First response"
-      },
-      {
-        role: "user",
-        content: "Second message"
-      }
-    ];
-
-    // Stream with the session wrapper
-    const stream = await session.stream({
-      messages: allMessages
-    });
-
-    // Consume the stream
-    const reader = stream.getReader();
-    while (true) {
-      const { done } = await reader.read();
-      if (done) break;
-    }
-    reader.releaseLock();
-
-    // Save the last stream
-    await session.saveLastStream();
-
-    // Wait a bit for async operations to complete
-    await new Promise(resolve => setTimeout(resolve, 100));
-
-    // Verify all messages were persisted (3 from client + 1 assistant response)
-    const sessionEntity = await sessionRepo.findOne({
-      where: { id: sessionId }
-    });
-
-    expect(sessionEntity?.messages).toHaveLength(4);
+    expect(sessionEntity?.uiMessages).toHaveLength(2); // user message + assistant message
+    expect(sessionEntity?.uiMessages[0].role).toBe("user");
+    expect(extractTextFromMessage(sessionEntity?.uiMessages[0] as TypedUIMessage)).toBe("Hello, agent!");
+    expect(sessionEntity?.uiMessages[1].role).toBe("assistant");
+    expect(extractTextFromMessage(sessionEntity?.uiMessages[1] as TypedUIMessage)).toBe("Mock response");
   });
 
   it("should handle new session", async () => {
@@ -229,31 +138,23 @@ describe("AgentSession", () => {
       agentName: "mock",
       agentConfig: {},
       sessionId,
-      dataSource,
-      initialPrompt: "First message ever"
+      dataSource
     });
 
-    const messages: ModelMessage[] = [
+    const messages: TypedUIMessage[] = [
       {
+        id: "msg-1",
         role: "user",
-        content: "First message ever"
+        parts: [{ type: "text", text: "First message ever" }]
       }
     ];
 
-    const stream = await session.stream({
-      messages
+    const stream = session.chat({
+      uiMessages: messages
     });
 
     // Consume the stream
-    const reader = stream.getReader();
-    while (true) {
-      const { done } = await reader.read();
-      if (done) break;
-    }
-    reader.releaseLock();
-
-    // Save the last stream
-    await session.saveLastStream();
+    await consumeStream({ stream });
 
     // Wait for async operations
     await new Promise(resolve => setTimeout(resolve, 100));
@@ -273,8 +174,8 @@ describe("AgentSession", () => {
     let finishCalled = false;
     let finishResult: any = null;
 
-    const stream = await session.stream({
-      messages: [{ role: "user", content: "Test" }],
+    const stream = session.chat({
+      uiMessages: [{ id: "msg-1", role: "user", parts: [{ type: "text", text: "Test" }] }],
       onFinish: (params) => {
         finishCalled = true;
         finishResult = params.result;
@@ -282,15 +183,7 @@ describe("AgentSession", () => {
     });
 
     // Consume the stream
-    const reader = stream.getReader();
-    while (true) {
-      const { done } = await reader.read();
-      if (done) break;
-    }
-    reader.releaseLock();
-
-    // Save the last stream
-    await session.saveLastStream();
+    await consumeStream({ stream });
 
     // Wait for async operations
     await new Promise(resolve => setTimeout(resolve, 100));
@@ -299,12 +192,12 @@ describe("AgentSession", () => {
     expect(finishResult).toBeDefined();
   });
 
-  it("should retrieve merged messages using getMessages()", async () => {
+  it("should retrieve messages using getMessages()", async () => {
     // Pre-populate session with messages
     const sessionRepo = dataSource.getRepository(AgentSessionEntity);
     await sessionRepo.save({
       id: sessionId,
-      messages: [
+      uiMessages: [
         {
           role: "user",
           content: "Test message"
@@ -314,25 +207,325 @@ describe("AgentSession", () => {
           content: "Test response"
         }
       ],
-      lastMessage: {
-        role: "assistant",
-        content: "Streaming message"
-      }
+      hasActiveStream: false,
+      agentName: "mock",
+      agentConfig: {}
     });
 
     const session = await AgentSession.get({
-      agentName: "mock",
       sessionId,
       dataSource
     });
 
     const messages = await session.getMessages();
 
-    // Should return merged messages (2 completed + 1 streaming)
-    expect(messages).toHaveLength(3);
-    expect(messages[0].content).toBe("Test message");
-    expect(messages[1].content).toBe("Test response");
-    expect(messages[2].content).toBe("Streaming message");
+    // Should return completed messages from database
+    expect(messages).toHaveLength(2);
+    expect(extractTextFromMessage(messages[0])).toBe("Test message");
+    expect(extractTextFromMessage(messages[1])).toBe("Test response");
+  });
+
+  describe("resumeChatStream", () => {
+    let redis: Awaited<ReturnType<typeof getRedisClient>>;
+
+    beforeEach(async () => {
+      // Create Redis client for test suite
+      redis = await getRedisClient();
+      
+      // Clean up Redis stream before each test
+      const streamKey = getSessionStreamKey({ sessionId });
+      await redis.del(streamKey);
+    });
+
+    afterEach(async () => {
+      // Clean up Redis client after each test
+      await redis.quit();
+    });
+
+    it("should stream initial chunks immediately", async () => {
+      // Pre-populate Redis with message chunks
+      const streamKey = getSessionStreamKey({ sessionId });
+      
+      await redis.xAdd(streamKey, "*", { type: "stream-chunk", data: JSON.stringify({ type: "text-start", id: "msg-1" }) });
+      await redis.xAdd(streamKey, "*", { type: "stream-chunk", data: JSON.stringify({ type: "text-delta", id: "msg-1", delta: "Hello" }) });
+      await redis.xAdd(streamKey, "*", { type: "stream-chunk", data: JSON.stringify({ type: "text-delta", id: "msg-1", delta: " world" }) });
+      await redis.xAdd(streamKey, "*", { type: "stream-chunk", data: JSON.stringify({ type: "text-end", id: "msg-1" }) });
+      // Add sentinel message to signal end of stream
+      await redis.xAdd(streamKey, "*", { type: "stream-end", data: JSON.stringify({ type: "stream-end" }) });
+
+      const sessionRepo = dataSource.getRepository(AgentSessionEntity);
+      await sessionRepo.save({
+        id: sessionId,
+        uiMessages: [],
+        hasActiveStream: true,
+        agentName: "mock",
+        agentConfig: {}
+      });
+
+      const session = await AgentSession.get({
+        sessionId,
+        dataSource
+      });
+
+      const stream = session.resumeChatStream();
+
+      // Collect all chunks
+      const chunks = await streamToArray(stream);
+      
+      expect(chunks).toHaveLength(4);
+      expect(chunks[0]).toEqual({ type: "text-start", id: "msg-1" });
+      expect(chunks[1]).toEqual({ type: "text-delta", id: "msg-1", delta: "Hello" });
+      expect(chunks[2]).toEqual({ type: "text-delta", id: "msg-1", delta: " world" });
+      expect(chunks[3]).toEqual({ type: "text-end", id: "msg-1" });
+    });
+
+    it("should stream new chunks", async () => {
+      // Pre-populate Redis with initial chunks
+      const streamKey = getSessionStreamKey({ sessionId });
+      
+      await redis.xAdd(streamKey, "*", { type: "stream-chunk", data: JSON.stringify({ type: "text-start", id: "msg-1" }) });
+      await redis.xAdd(streamKey, "*", { type: "stream-chunk", data: JSON.stringify({ type: "text-delta", id: "msg-1", delta: "Initial" }) });
+
+      const sessionRepo = dataSource.getRepository(AgentSessionEntity);
+      await sessionRepo.save({
+        id: sessionId,
+        uiMessages: [],
+        hasActiveStream: true,
+        agentName: "mock",
+        agentConfig: {}
+      });
+
+      const session = await AgentSession.get({
+        sessionId,
+        dataSource
+      });
+
+      const stream = session.resumeChatStream();
+
+      // Simulate adding new chunks in the background
+      setTimeout(async () => {
+        await redis.xAdd(streamKey, "*", { type: "stream-chunk", data: JSON.stringify({ type: "text-delta", id: "msg-1", delta: " more" }) });
+        await redis.xAdd(streamKey, "*", { type: "stream-end", data: JSON.stringify({ type: "stream-end" }) });
+      }, 500);
+
+      // Collect all chunks
+      const chunks = await streamToArray(stream);
+
+      // Should have received all chunks including the new ones
+      expect(chunks).toHaveLength(3);
+      expect(chunks[0]).toEqual({ type: "text-start", id: "msg-1" });
+      expect(chunks[1]).toEqual({ type: "text-delta", id: "msg-1", delta: "Initial" });
+      expect(chunks[2]).toEqual({ type: "text-delta", id: "msg-1", delta: " more" });
+    });
+
+    it("should stop when Redis stream is finished", async () => {
+      // Pre-populate Redis with initial chunk
+      const streamKey = getSessionStreamKey({ sessionId });
+      
+      await redis.xAdd(streamKey, "*", { type: "stream-chunk", data: JSON.stringify({ type: "text-start", id: "msg-1" }) });
+
+      const sessionRepo = dataSource.getRepository(AgentSessionEntity);
+      await sessionRepo.save({
+        id: sessionId,
+        uiMessages: [],
+        hasActiveStream: true,
+        agentName: "mock",
+        agentConfig: {}
+      });
+
+      const session = await AgentSession.get({
+        sessionId,
+        dataSource
+      });
+
+      const stream = session.resumeChatStream();
+
+      // Delete Redis stream after short delay to stop streaming
+      setTimeout(async () => {
+        await redis.xAdd(streamKey, "*", { type: "stream-end" });
+        await redis.del(streamKey);
+      }, 200);
+
+      // Collect all chunks
+      const chunks = await streamToArray(stream);
+
+      // Should have received initial chunk and then closed
+      expect(chunks).toHaveLength(1);
+      expect(chunks[0]).toEqual({ type: "text-start", id: "msg-1" });
+    });
+
+    it("should return false for hasActiveStream when stream is not active", async () => {
+      const session = await AgentSession.create({
+        agentName: "mock",
+        agentConfig: {},
+        sessionId,
+        dataSource
+      });
+
+      expect(session.hasActiveStream()).toBe(false);
+    });
+
+    it("should return true for hasActiveStream when stream is active", async () => {
+      const sessionRepo = dataSource.getRepository(AgentSessionEntity);
+      await sessionRepo.save({
+        id: sessionId,
+        uiMessages: [],
+        hasActiveStream: true,
+        agentName: "mock",
+        agentConfig: {}
+      });
+
+      const session = await AgentSession.get({
+        sessionId,
+        dataSource
+      });
+
+      expect(session.hasActiveStream()).toBe(true);
+    });
+  });
+
+  describe("finalizeStaleStream", () => {
+    let redis: Awaited<ReturnType<typeof getRedisClient>>;
+
+    beforeEach(async () => {
+      redis = await getRedisClient();
+      
+      // Clean up Redis stream before each test
+      const streamKey = getSessionStreamKey({ sessionId });
+      await redis.del(streamKey);
+    });
+
+    afterEach(async () => {
+      await redis.quit();
+    });
+
+    it("should return false when hasActiveStream is false", async () => {
+      const session = await AgentSession.create({
+        agentName: "mock",
+        agentConfig: {},
+        sessionId,
+        dataSource
+      });
+
+      const result = await session.finalizeStaleStream();
+
+      expect(result).toBe(false);
+    });
+
+    it("should return false when stream is not stale yet", async () => {
+      // Create session with active stream
+      const streamKey = getSessionStreamKey({ sessionId });
+      
+      // Add recent chunks (current timestamp)
+      await redis.xAdd(streamKey, "*", { type: "stream-chunk", data: JSON.stringify({ type: "text-start", id: "msg-1" }) });
+      await redis.xAdd(streamKey, "*", { type: "stream-chunk", data: JSON.stringify({ type: "text-delta", id: "msg-1", delta: "Hello" }) });
+
+      const sessionRepo = dataSource.getRepository(AgentSessionEntity);
+      await sessionRepo.save({
+        id: sessionId,
+        uiMessages: [],
+        hasActiveStream: true,
+        agentName: "mock",
+        agentConfig: {}
+      });
+
+      const session = await AgentSession.get({
+        sessionId,
+        dataSource
+      });
+
+      const result = await session.finalizeStaleStream();
+
+      expect(result).toBe(false);
+      
+      // Verify stream still marked as active
+      const updatedEntity = await sessionRepo.findOne({ where: { id: sessionId } });
+      expect(updatedEntity?.hasActiveStream).toBe(true);
+    });
+
+    it("should return true and finalize when stream is stale", async () => {
+      // Create session with active stream
+      const streamKey = getSessionStreamKey({ sessionId });
+      
+      // Add chunks with old timestamp (more than 60 seconds ago)
+      // Redis xAdd accepts timestamp-sequence format for the ID
+      const staleTimestamp = Date.now() - 61 * 1000; // 61 seconds ago
+      await redis.xAdd(streamKey, `${staleTimestamp}-0`, { type: "stream-chunk", data: JSON.stringify({ type: "text-start", id: "msg-1" }) });
+      await redis.xAdd(streamKey, `${staleTimestamp}-1`, { type: "stream-chunk", data: JSON.stringify({ type: "text-delta", id: "msg-1", delta: "Hello" }) });
+      await redis.xAdd(streamKey, `${staleTimestamp}-2`, { type: "stream-chunk", data: JSON.stringify({ type: "text-end", id: "msg-1" }) });
+
+      const sessionRepo = dataSource.getRepository(AgentSessionEntity);
+      await sessionRepo.save({
+        id: sessionId,
+        uiMessages: [],
+        hasActiveStream: true,
+        agentName: "mock",
+        agentConfig: {}
+      });
+
+      const session = await AgentSession.get({
+        sessionId,
+        dataSource
+      });
+
+      const result = await session.finalizeStaleStream();
+
+      expect(result).toBe(true);
+      
+      // Verify stream is no longer active
+      const updatedEntity = await sessionRepo.findOne({ where: { id: sessionId } });
+      expect(updatedEntity?.hasActiveStream).toBe(false);
+      
+      // Verify message was saved
+      expect(updatedEntity?.uiMessages).toHaveLength(1);
+      expect(updatedEntity?.uiMessages[0].role).toBe("assistant");
+      expect(extractTextFromMessage(updatedEntity?.uiMessages[0] as TypedUIMessage)).toBe("Hello");
+      
+      // Verify Redis stream was deleted
+      const chunks = await redis.xRange(streamKey, "-", "+");
+      expect(chunks).toHaveLength(0);
+    });
+
+    it("should preserve existing messages when finalizing stale stream", async () => {
+      // Create session with existing messages
+      const streamKey = getSessionStreamKey({ sessionId });
+      
+      // Add stale chunks
+      const staleTimestamp = Date.now() - 61 * 1000;
+      await redis.xAdd(streamKey, `${staleTimestamp}-0`, { type: "stream-chunk", data: JSON.stringify({ type: "text-start", id: "msg-2" }) });
+      await redis.xAdd(streamKey, `${staleTimestamp}-1`, { type: "stream-chunk", data: JSON.stringify({ type: "text-delta", id: "msg-2", delta: "New message" }) });
+      await redis.xAdd(streamKey, `${staleTimestamp}-2`, { type: "stream-chunk", data: JSON.stringify({ type: "text-end", id: "msg-2" }) });
+
+      const sessionRepo = dataSource.getRepository(AgentSessionEntity);
+      await sessionRepo.save({
+        id: sessionId,
+        uiMessages: [
+          {
+            id: "msg-1",
+            role: "user",
+            parts: [{ type: "text", text: "Existing message" }]
+          }
+        ],
+        hasActiveStream: true,
+        agentName: "mock",
+        agentConfig: {}
+      });
+
+      const session = await AgentSession.get({
+        sessionId,
+        dataSource
+      });
+
+      const result = await session.finalizeStaleStream();
+
+      expect(result).toBe(true);
+      
+      // Verify both messages exist
+      const updatedEntity = await sessionRepo.findOne({ where: { id: sessionId } });
+      expect(updatedEntity?.uiMessages).toHaveLength(2);
+      expect(extractTextFromMessage(updatedEntity?.uiMessages[0] as TypedUIMessage)).toBe("Existing message");
+      expect(extractTextFromMessage(updatedEntity?.uiMessages[1] as TypedUIMessage)).toBe("New message");
+    });
   });
 });
 

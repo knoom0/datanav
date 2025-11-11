@@ -138,7 +138,7 @@ export class DataDiscoveryAgent extends EvoAgentBase {
         functionId: `${this.constructor.name}.iterate-${iteration}`,
       }
     });
-    await pipeUIMessageStream(res.toUIMessageStream(), writer, { omitStartFinish: true });
+    await pipeUIMessageStream({ source: res.toUIMessageStream(), target: writer, omitStartFinish: true });
 
     if (error) {
       throw error;

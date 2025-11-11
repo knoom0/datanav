@@ -1,14 +1,10 @@
 import { EvoAgent } from "@/lib/agent/core/agent";
-import { GEval } from "@/lib/agent/core/g-eval";
-import { DEFAULT_QA_MODEL } from "@/lib/consts";
 import { DataCatalog } from "@/lib/data/catalog";
 import { DatabaseClient } from "@/lib/data/db-client";
 import { getUserDataSource } from "@/lib/entities";
+import { Chatbot } from "@/lib/meta-agent/chatbot";
+import { createDashbot } from "@/lib/meta-agent/dashbot";
 import { Project, ProjectConfig } from "@/lib/types";
-
-import { Chatbot } from "./chatbot";
-import { createDashbot } from "./dashbot";
-import { Strategist } from "./strategist";
 
 /**
  * Type definition for agent class constructors
@@ -105,7 +101,7 @@ export function getRegisteredAgents(): string[] {
 // Register built-in agents
 registerAgentClass({
   name: "chatbot",
-  factory: async ({ project, config }) => {
+  factory: async ({ project, config: _config }) => {
     const dataSource = await getUserDataSource();
     const dbClient = new DatabaseClient(dataSource);
     const dataCatalog = new DataCatalog({ dataSource });
@@ -126,44 +122,6 @@ registerAgentClass({
       throw new Error("ProjectConfig is required for Dashbot");
     }
     return await createDashbot(project, projectConfig);
-  }
-});
-
-registerAgentClass({
-  name: "strategist",
-  factory: async ({ project, config }) => {
-    // Get target agent config, default to chatbot
-    const targetAgentName = config.targetAgent || "chatbot";
-    const targetAgentConfig = config.targetAgentConfig || {};
-    
-    // Create target project
-    const targetProject = new Project();
-    
-    // Create target agent
-    const targetAgent = await createAgent({
-      name: targetAgentName,
-      project: targetProject,
-      config: targetAgentConfig
-    });
-    
-    // Create GEval evaluator
-    const geval = new GEval({
-      name: config.gevalName || "Strategy Quality Evaluator",
-      model: config.gevalModel || DEFAULT_QA_MODEL,
-      criteria: config.gevalCriteria || [
-        "The output should be clear, comprehensive, and well-structured",
-        "The output should address the user's question or task effectively",
-        "The output should demonstrate good reasoning and decision-making"
-      ],
-      threshold: config.gevalThreshold || 0.7
-    });
-    
-    return new Strategist({
-      project,
-      targetAgent,
-      artifactType: config.artifactType || "report",
-      geval
-    });
   }
 });
 

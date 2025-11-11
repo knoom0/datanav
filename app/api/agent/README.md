@@ -78,7 +78,7 @@ GET /api/agent/[name]/session
 
 interface AgentSessionInfo {
   id: string;
-  messageCount: number;
+  title: string | null;
   hasProject: boolean;
   createdAt: string;  // ISO date string
   updatedAt: string;  // ISO date string

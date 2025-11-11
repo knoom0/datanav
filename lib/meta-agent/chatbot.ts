@@ -29,14 +29,14 @@ export class Chatbot extends EvoAgentChain {
   }
 
   /**
-   * Override stream method to filter out non-user messages
+   * Override chat method to filter out non-user messages
    */
-  stream(params: StreamParams): UIMessageStream {
+  chat(params: StreamParams): UIMessageStream {
     const filteredParams = {
       ...params,
       messages: filterUserMessages(params.messages)
     };
-    return super.stream(filteredParams);
+    return super.chat(filteredParams);
   }
 
   /**

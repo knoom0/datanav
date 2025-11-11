@@ -15,6 +15,7 @@ Do not mock the logger in tests. Let logger calls execute naturally to ensure lo
 ## Pattern
 
 ❌ Don't:
+
 ```typescript
 // Mock logger to avoid console output during tests
 jest.mock('@/lib/logger', () => ({
@@ -27,6 +28,7 @@ jest.mock('@/lib/logger', () => ({
 ```
 
 ✅ Do:
+
 ```typescript
 // Note: Logger is not mocked - following cursor rule to allow natural logger execution
 import logger from '@/lib/logger';

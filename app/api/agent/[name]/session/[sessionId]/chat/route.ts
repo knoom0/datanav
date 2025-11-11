@@ -1,5 +1,5 @@
 import { createUIMessageStreamResponse, consumeStream } from "ai";
-import { after, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
 import { AgentSession } from "@/lib/agent/session";
 import { getUserDataSource } from "@/lib/entities";
@@ -20,14 +20,13 @@ interface RouteContext {
  * This endpoint provides a consistent interface for all agent types:
  * - Creates an AgentSession which handles project loading and persistence
  * - Streams the response back to the client with guaranteed completion
- * - Uses after() to consume the stream and ensure onFinish handlers run
+ * - Uses consumeSseStream callback to consume the stream and ensure onFinish handlers run
  */
-export async function POST(req: Request, { params }: RouteContext) {
+async function postHandler(req: Request, { params }: RouteContext) {
   const { name, sessionId } = await params;
   
-  const { messages: uiMessages, config = {} }: { 
+  const { messages: uiMessages }: { 
     messages: TypedUIMessage[];
-    config?: Record<string, any>;
   } = await req.json();
 
   // Get the user data source for session persistence
@@ -35,7 +34,7 @@ export async function POST(req: Request, { params }: RouteContext) {
 
   logger.info(`Creating session-wrapped ${name} agent for session: ${sessionId}`);
 
-  // Get or create AgentSession
+  // Get AgentSession (should already exist, created by page.tsx)
   const session = await AgentSession.get({
     sessionId,
     dataSource
@@ -43,34 +42,32 @@ export async function POST(req: Request, { params }: RouteContext) {
 
   // Stream response - chunks are saved as they flow through
   // AgentSession handles UIMessage[] to ModelMessage[] conversion internally
-  const stream = await session.stream({ 
-    uiMessages,
-    agentName: name,
-    agentConfig: config
+  const stream = session.chat({ 
+    uiMessages
   });
 
-  // Fork stream: one for client, one for consumption in after()
-  const [clientStream, streamToConsume] = stream.tee();
-
-  // Use after() to consume the stream and ensure completion
-  after(async () => {
-    await consumeStream({ stream: streamToConsume });
-  });
-
-  return createUIMessageStreamResponse({ stream: clientStream });
+  // Use consumeSseStream to consume the stream and ensure completion
+  return createUIMessageStreamResponse({ 
+    stream,
+    consumeSseStream: async ({ stream: sseStream }) => {
+      await consumeStream({ stream: sseStream });
+    logger.info(`Stream completed for session: ${sessionId}`);
+    }
+  }) as NextResponse;
 }
+
+export const POST = withAPIErrorHandler(postHandler);
 
 /**
  * GET handler for resuming active streams
  * 
- * This endpoint checks if there's an active stream (uiMessageChunks) for the session.
+ * This endpoint checks if there's an active stream for the session.
  * If no active stream exists, returns 204 (No Content).
  * If an active stream exists, creates a UIMessageStream that:
- * - Streams existing chunks first
- * - Polls the database for new chunks until uiMessageChunks becomes null
+ * - Streams existing chunks from Redis first
+ * - Uses Redis blocking reads to wait for new chunks
+ * - Completes when the Redis stream is deleted (indicating stream completion)
  * - Returns the stream to the client
- * 
- * Before resuming, this handler also checks for and finalizes stale streams.
  */
 async function getHandler(_req: Request, { params }: RouteContext): Promise<NextResponse> {
   const { sessionId } = await params;
@@ -82,17 +79,13 @@ async function getHandler(_req: Request, { params }: RouteContext): Promise<Next
   const session = await AgentSession.get({
     sessionId,
     dataSource,
-    createIfNotExists: false
-  }).catch(() => null);
+  });
   
   if (!session) {
     logger.warn(`Session not found for resume: ${sessionId}`);
     return new NextResponse(null, { status: 204 });
   }
-  
-  // Finalize stale stream if it exists
-  await session.finalizeStaleStream();
-  
+    
   // Check if there's an active stream
   if (!session.hasActiveStream()) {
     return new NextResponse(null, { status: 204 });
@@ -101,7 +94,7 @@ async function getHandler(_req: Request, { params }: RouteContext): Promise<Next
   logger.info(`Resuming stream for session: ${sessionId}`);
   
   // Stream chunks from database using AgentSession method
-  const stream = session.streamFromDatabase();
+  const stream = session.resumeChatStream();
   
   return createUIMessageStreamResponse({ stream }) as NextResponse;
 }

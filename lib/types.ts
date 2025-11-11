@@ -52,9 +52,29 @@ export interface MessageMetadata {
 }
 
 /**
+ * Information about an agent session
+ */
+export interface AgentSessionInfo {
+  id: string;
+  title: string | null;
+  hasProject: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
  * Typed UIMessage with metadata
  */
 export type TypedUIMessage = UIMessage<MessageMetadata>;
+
+/**
+ * Chat status type for managing chat UI state
+ * - ready: Ready to accept new input
+ * - submitted: Message has been sent, awaiting response
+ * - streaming: Response is actively streaming
+ * - error: An error occurred
+ */
+export type ChatStatus = "ready" | "submitted" | "streaming" | "error";
 
 // ActionableError is a base class for errors that can be handled by the agent
 export class ActionableError extends Error {}

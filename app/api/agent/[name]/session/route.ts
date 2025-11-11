@@ -1,21 +1,10 @@
-import { randomUUID } from "crypto";
-
-import { AgentSession } from "@/lib/agent/session";
 import { getUserDataSource, AgentSessionEntity } from "@/lib/entities";
+import { AgentSessionInfo } from "@/lib/types";
 
 interface RouteContext {
   params: Promise<{
     name: string;
   }>;
-}
-
-export interface AgentSessionInfo {
-  id: string;
-  title: string | null;
-  messageCount: number;
-  hasProject: boolean;
-  createdAt: string;
-  updatedAt: string;
 }
 
 /**
@@ -32,7 +21,9 @@ export async function GET(req: Request, { params }: RouteContext) {
   const sessionRepo = dataSource.getRepository(AgentSessionEntity);
 
   // Get all sessions, ordered by most recent first
+  // Exclude uiMessages field for performance - it can be very large
   const sessions = await sessionRepo.find({
+    select: ["id", "title", "hasActiveStream", "agentName", "agentConfig", "createdAt", "updatedAt"],
     order: {
       updatedAt: "DESC"
     }
@@ -42,8 +33,7 @@ export async function GET(req: Request, { params }: RouteContext) {
   const sessionInfos: AgentSessionInfo[] = sessions.map(session => ({
     id: session.id,
     title: session.title,
-    messageCount: session.uiMessages?.length || 0,
-    hasProject: !!session.project,
+    hasProject: false, // Project is not stored in session entity
     createdAt: session.createdAt.toISOString(),
     updatedAt: session.updatedAt.toISOString()
   }));
@@ -52,34 +42,6 @@ export async function GET(req: Request, { params }: RouteContext) {
     agentName: name,
     sessions: sessionInfos,
     total: sessionInfos.length
-  });
-}
-
-/**
- * PUT /api/agent/[name]/session
- * 
- * Creates a new agent session with the provided configuration.
- * Returns the created session ID.
- */
-export async function PUT(req: Request, { params }: RouteContext) {
-  const { name } = await params;
-  
-  // Generate a new session ID
-  const sessionId = randomUUID();
-  
-  // Get the user data source
-  const dataSource = await getUserDataSource();
-  
-  // Create the AgentSession (this also saves to DB)
-  await AgentSession.create({
-    sessionId,
-    dataSource
-  });
-  
-  return Response.json({
-    agentName: name,
-    sessionId,
-    createdAt: new Date().toISOString()
   });
 }
 

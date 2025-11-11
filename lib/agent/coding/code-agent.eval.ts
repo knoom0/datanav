@@ -271,7 +271,7 @@ describe.sequential("CodeAgent eval", () => {
       });
             
       const agent = new CodeAgent({ project });
-      const stream = agent.stream({
+      const stream = await agent.chat({
         messages: [
           {
             role: "user",

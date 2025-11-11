@@ -1,13 +1,13 @@
 import "server-only";
 import "reflect-metadata";
 
-import { type InferUIMessageChunk, type UIMessage } from "ai";
-import { DataSource, Entity, PrimaryColumn, PrimaryGeneratedColumn, Column, BaseEntity, type DataSourceOptions, Unique, CreateDateColumn, UpdateDateColumn } from "typeorm";
+import { DataSource, Entity, PrimaryColumn, PrimaryGeneratedColumn, Column, BaseEntity, type DataSourceOptions, Unique } from "typeorm";
 
 import { getUserDataSourceOptions } from "@/lib/hosting/user-database";
 import logger from "@/lib/logger";
 import type { DataSpec, TypedUIMessage } from "@/lib/types";
 import { getCurrentUserId } from "@/lib/util/auth-util";
+import { CreateDateColumnUTC, UpdateDateColumnUTC } from "@/lib/util/database-util";
 import { createSchemaIfNotExist } from "@/lib/util/db-util";
 import { safeErrorString } from "@/lib/util/log-util";
 
@@ -38,10 +38,10 @@ export class ComponentInfoEntity extends BaseEntity {
   @Column({ type: "json" })
     keywords!: string[];
 
-  @CreateDateColumn()
+  @CreateDateColumnUTC()
     createdAt!: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumnUTC()
     updatedAt!: Date;
 }
 
@@ -71,10 +71,10 @@ export class DataConnectorConfigEntity extends BaseEntity {
   @Column({ type: "json", nullable: true })
     dataLoaderConfig!: Record<string, any> | null;
 
-  @CreateDateColumn()
+  @CreateDateColumnUTC()
     createdAt!: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumnUTC()
     updatedAt!: Date;
 }
 
@@ -119,10 +119,10 @@ export class DataConnectorStatusEntity extends BaseEntity {
   @Column({ type: Date, nullable: true })
     askedToConnectUntil!: Date | null;
 
-  @CreateDateColumn()
+  @CreateDateColumnUTC()
     createdAt!: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumnUTC()
     updatedAt!: Date;
 }
 
@@ -164,10 +164,10 @@ export class DataJobEntity extends BaseEntity {
   @Column({ type: Date, nullable: true })
     finishedAt!: Date | null;
 
-  @CreateDateColumn()
+  @CreateDateColumnUTC()
     createdAt!: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumnUTC()
     updatedAt!: Date;
 }
 
@@ -201,10 +201,10 @@ export class DataTableStatusEntity extends BaseEntity {
   @Column({ type: Date, nullable: true })
     lastSyncedAt!: Date | null;
 
-  @CreateDateColumn()
+  @CreateDateColumnUTC()
     createdAt!: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumnUTC()
     updatedAt!: Date;
 }
 
@@ -241,10 +241,10 @@ export class PulseConfigEntity extends BaseEntity {
   @Column({ type: Date, nullable: true })
     nextRunAt!: Date | null;
 
-  @CreateDateColumn()
+  @CreateDateColumnUTC()
     createdAt!: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumnUTC()
     updatedAt!: Date;
 }
 
@@ -306,10 +306,10 @@ export class PulseJobEntity extends BaseEntity {
   @Column({ type: Date, nullable: true })
     finishedAt!: Date | null;
 
-  @CreateDateColumn()
+  @CreateDateColumnUTC()
     createdAt!: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumnUTC()
     updatedAt!: Date;
 }
 
@@ -329,10 +329,10 @@ export class ReportBundleEntity extends BaseEntity {
       }>;
     };
 
-  @CreateDateColumn()
+  @CreateDateColumnUTC()
     createdAt!: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumnUTC()
     updatedAt!: Date;
 }
 
@@ -377,25 +377,29 @@ export class AgentSessionEntity extends BaseEntity {
     title!: string | null;
 
   /**
-   * The UI message stream chunks being streamed, stored separately for efficiency.
-   * This field is continuously updated during streaming with UIMessageChunks.
-   * Once the stream completes, chunks are converted to a UIMessage and merged into
-   * the uiMessages array.
+   * Flag indicating if there is an active stream.
+   * When true, message chunks are being stored in Redis.
+   * When false or null, there is no active stream.
    */
-  @Column({ type: "json", nullable: true })
-    uiMessageChunks!: Array<InferUIMessageChunk<UIMessage>> | null;
+  @Column({ type: "boolean", default: false })
+    hasActiveStream!: boolean;
 
   /**
-   * The project associated with this session, serialized as JSON.
-   * This includes the project ID, prompt, artifacts, and metadata.
+   * The agent name associated with this session (e.g., "chatbot", "strategist", "dashbot")
+   */
+  @Column({ type: "varchar", nullable: true })
+    agentName!: string | null;
+
+  /**
+   * The agent configuration for this session, stored as JSON
    */
   @Column({ type: "json", nullable: true })
-    project!: any | null;
+    agentConfig!: Record<string, any> | null;
 
-  @CreateDateColumn()
+  @CreateDateColumnUTC()
     createdAt!: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumnUTC()
     updatedAt!: Date;
 }
 
@@ -417,6 +421,7 @@ export const ENTITIES = [
 const COMMON_DATABASE_OPTIONS = {
   entities: [...ENTITIES],
   synchronize: true,
+  timezone: "UTC",
 };
 
 // Cache for user-specific data sources

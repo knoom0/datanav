@@ -213,7 +213,7 @@ export class PulseJobScheduler {
       const chatbot = await Chatbot.create(project);
 
       // Invoke chatbot with the configured prompt
-      const stream = chatbot.stream({
+      const stream = await chatbot.chat({
         messages: [
           {
             role: "user",

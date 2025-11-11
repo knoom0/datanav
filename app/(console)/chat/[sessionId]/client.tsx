@@ -4,7 +4,7 @@ import { useChat } from "@ai-sdk/react";
 import { Box, Stack, Group, Button } from "@mantine/core";
 import { IconEye } from "@tabler/icons-react";
 import { DefaultChatTransport } from "ai";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 import AgentInput from "@/components/agent-input";
 import { useAppTitle } from "@/components/app-title-context";
@@ -16,11 +16,14 @@ import { extractArtifacts, getLatestAssistantMessage } from "@/lib/util/message-
 interface ChatPageClientProps {
   sessionId: string;
   initialMessages: TypedUIMessage[];
+  initialPrompt: string | null;
+  sessionTitle: string | null;
 }
 
-export default function ChatPageClient({ sessionId, initialMessages }: ChatPageClientProps) {
+export default function ChatPageClient({ sessionId, initialMessages, initialPrompt, sessionTitle }: ChatPageClientProps) {
   const { setTitle } = useAppTitle();
   const [isOverlayOpen, setIsOverlayOpen] = useState(false);
+  const initialPromptSentRef = useRef(false);
   
   const useChatHelpers = useChat<TypedUIMessage>({
     id: sessionId,
@@ -44,7 +47,15 @@ export default function ChatPageClient({ sessionId, initialMessages }: ChatPageC
       }
     },
   });
-  const { messages, error } = useChatHelpers;
+  const { messages, error, sendMessage, stop, status } = useChatHelpers;
+
+  // Send initial prompt if provided and not already sent
+  useEffect(() => {
+    if (initialPrompt && !initialPromptSentRef.current) {
+      initialPromptSentRef.current = true;
+      sendMessage({ text: initialPrompt });
+    }
+  }, [initialPrompt, sendMessage]);
 
   // Extract artifacts from the latest assistant message only
   const latestAssistantMessage = getLatestAssistantMessage(messages);
@@ -54,8 +65,8 @@ export default function ChatPageClient({ sessionId, initialMessages }: ChatPageC
 
   // Set page title when component mounts
   useEffect(() => {
-    setTitle("Chat");
-  }, [setTitle]);
+    setTitle(sessionTitle || "Chat");
+  }, [setTitle, sessionTitle]);
 
   return (
     <Box className="mobile-width" h={"calc(100dvh - 60px)"}>
@@ -90,7 +101,11 @@ export default function ChatPageClient({ sessionId, initialMessages }: ChatPageC
         </Box>
 
         <Box p="md" style={{ flexGrow: 0 }} pt={0}>
-          <AgentInput useChatHelpers={useChatHelpers} />
+          <AgentInput 
+            onSubmit={sendMessage}
+            onStop={stop}
+            status={status}
+          />
         </Box>
       </Stack>
       

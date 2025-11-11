@@ -12,7 +12,6 @@ Collection of tools that agents can use to perform various operations.
 
 ### Meta-Agent Tools
 
-- **[AgentInvokeTool](./agent-invoke-tool.ts)**: Invoke other agents and collect their output (for meta-agent workflows)
 - **[GEvalTool](./g-eval-tool.ts)**: Evaluate project artifacts using G-Eval criteria
 
 
@@ -99,7 +98,6 @@ const result = await projectTool.execute({
 - `DataConnectorTool`: Connect to external data sources
 
 ### Agent Orchestration
-- `AgentInvokeTool`: Invoke other agents (meta-agent pattern)
 - `GEvalTool`: Evaluate agent outputs
 
 ### Content Editing

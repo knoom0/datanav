@@ -1,8 +1,9 @@
 import "reflect-metadata";
-import { DataSource, Entity, PrimaryColumn, PrimaryGeneratedColumn, Column, BaseEntity, CreateDateColumn, UpdateDateColumn } from "typeorm";
+import { DataSource, Entity, PrimaryColumn, PrimaryGeneratedColumn, Column, BaseEntity } from "typeorm";
 
 import { getConfig } from "@/lib/config";
 import logger from "@/lib/logger";
+import { CreateDateColumnUTC, UpdateDateColumnUTC } from "@/lib/util/database-util";
 import { createSchemaIfNotExist } from "@/lib/util/db-util";
 import { safeErrorString } from "@/lib/util/log-util";
 
@@ -22,10 +23,10 @@ export class UserDatabaseConfig extends BaseEntity {
   @Column({ type: "text", nullable: true })
     externalConnectionString!: string | null;
 
-  @CreateDateColumn()
+  @CreateDateColumnUTC()
     createdAt!: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumnUTC()
     updatedAt!: Date;
 }
 
@@ -49,10 +50,10 @@ export class AgentStrategyEntity extends BaseEntity {
   @Column({ type: "vector", length: 1536 })
     topicEmbedding!: number[];
 
-  @CreateDateColumn()
+  @CreateDateColumnUTC()
     createdAt!: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumnUTC()
     updatedAt!: Date;
 }
 

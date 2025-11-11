@@ -83,4 +83,7 @@ export const config = {
     "@heroicons/react/24/solid": HeroIconsSolid,
     "@heroicons/react/24/outline": HeroIconsOutline,
   },
+
+  redis: {
+  },
 };

@@ -136,3 +136,26 @@ export function arrayToStream<T>(items: T[]): ReadableStream<T> {
   });
 }
 
+/**
+ * Convert a ReadableStream to an array
+ * Reads all chunks from the stream and returns them as an array
+ */
+export async function streamToArray<T>(stream: ReadableStream<T>): Promise<T[]> {
+  const chunks: T[] = [];
+  const reader = stream.getReader();
+  
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value !== undefined) {
+        chunks.push(value);
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  
+  return chunks;
+}
+

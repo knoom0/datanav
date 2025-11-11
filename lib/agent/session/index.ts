@@ -1,40 +1,37 @@
-import { readUIMessageStream, convertToModelMessages, generateText, type InferUIMessageChunk, type UIMessage } from "ai";
+import { readUIMessageStream, convertToModelMessages, generateText, createUIMessageStream, type InferUIMessageChunk, type UIMessage } from "ai";
 import { DataSource } from "typeorm";
 
-import { EvoAgentCallback, EvoAgentOnErrorCallback, UIMessageStream } from "@/lib/agent/core/agent";
+import { EvoAgentCallback, EvoAgentOnErrorCallback, UIMessageStream, pipeUIMessageStream } from "@/lib/agent/core/agent";
 import { AgentSessionEntity } from "@/lib/entities";
 import logger from "@/lib/logger";
 import { createAgent } from "@/lib/meta-agent";
 import { Project, TypedUIMessage } from "@/lib/types";
 import { getSmallModel } from "@/lib/util/ai-util";
 import { extractTextFromMessage, arrayToStream } from "@/lib/util/message-util";
-
-// Interval for updating message chunks in database (in milliseconds)
-const MESSAGE_CHUNKS_UPDATE_INTERVAL_MS = 500;
+import { getRedisClient, getSessionStreamKey } from "@/lib/util/redis-util";
 
 // Maximum time to wait for new chunks before considering stream stale (in milliseconds)
-const STALE_STREAM_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+const STALE_STREAM_TIMEOUT_MS = 60 * 1000; // 1 minute
 
-// Interval for polling database for new message chunks (in milliseconds)
-const STREAM_CHUNK_POLL_INTERVAL_MS = 500;
+// Redis message types for stream entries
+// - "stream-chunk": Regular UIMessage chunks being streamed
+// - "stream-end": Sentinel message to signal end of stream (allows resumeChatStream to stop without timeouts)
+export type RedisStreamMessageType = "stream-chunk" | "stream-end";
 
 /**
  * AgentSession wraps agent execution to provide session persistence.
  * This class handles the complete session lifecycle including:
  * - Creating and loading sessions from storage
- * - Persisting messages and project state to the database
+ * - Persisting messages to the database
  * - Managing streaming with incremental updates
  * 
  * Message Storage Strategy:
  * - Client is responsible for loading and sending all messages (including history)
  * - Messages are stored as UIMessage[] in the database
- * - During streaming, UIMessageChunks are saved to uiMessageChunks field
- * - This allows efficient incremental updates without re-writing the entire uiMessages array
- * - Once streaming completes (onFinish), chunks are converted to a UIMessage and merged into uiMessages array
- * 
- * Project Storage Strategy:
- * - Projects are stored with the session
- * - Projects are persisted after each streaming completion with all artifacts
+ * - During streaming, UIMessageChunks are stored in Redis streams
+ * - This allows efficient incremental updates without re-writing the database
+ * - Once streaming completes (onFinish), chunks are read from Redis and converted to a UIMessage
+ * - The UIMessage is then merged into uiMessages array in the database
  * 
  * Factory Methods:
  * - AgentSession.create() - Creates a new session with agent config and saves to DB
@@ -44,7 +41,6 @@ const STREAM_CHUNK_POLL_INTERVAL_MS = 500;
  */
 export class AgentSession {
   private entity: AgentSessionEntity;
-  private _project: Project;
   private dataSource: DataSource;
 
   private constructor(params: {
@@ -53,71 +49,52 @@ export class AgentSession {
   }) {
     this.entity = params.entity;
     this.dataSource = params.dataSource;
-    
-    // Deserialize project from entity
-    if (this.entity.project) {
-      const projectData = this.entity.project;
-      this._project = new Project();
-      
-      // Restore timestamps
-      if (projectData.createdAt) {
-        (this._project as any).createdAt = new Date(projectData.createdAt);
-      }
-      if (projectData.updatedAt) {
-        (this._project as any).updatedAt = new Date(projectData.updatedAt);
-      }
-      
-      // Restore artifacts
-      if (projectData.artifacts) {
-        for (const artifact of Object.values(projectData.artifacts)) {
-          this._project.put(artifact as any);
-        }
-      }
-    } else {
-      this._project = new Project();
-    }
-  }
-
-  get project(): Project {
-    return this._project;
   }
 
   get sessionId(): string {
     return this.entity.id;
   }
 
+  get title(): string | null {
+    return this.entity.title;
+  }
+
+  /**
+   * Delete this session from the database
+   */
+  async delete(): Promise<void> {
+    await this.entity.remove();
+  }
 
   /**
    * Create a new AgentSession and save it to the database
    * 
    * @param params.sessionId - Unique session identifier
    * @param params.dataSource - TypeORM data source for persistence
+   * @param params.agentName - The agent name for this session
+   * @param params.agentConfig - The agent configuration for this session
    */
   static async create(params: {
     sessionId: string;
     dataSource: DataSource;
+    agentName: string;
+    agentConfig?: Record<string, any>;
   }): Promise<AgentSession> {
-    const { sessionId, dataSource } = params;
-    
-    // Create a new project for this session
-    const project = new Project();
+    const { sessionId, dataSource, agentName, agentConfig = {} } = params;
     
     // Create and save the session entity to the database
     const sessionRepo = dataSource.getRepository(AgentSessionEntity);
     const entity = sessionRepo.create({
       id: sessionId,
       uiMessages: [],
-      uiMessageChunks: null,
+      hasActiveStream: false,
       title: null,
-      project: {
-        createdAt: project.createdAt,
-        updatedAt: project.updatedAt,
-        artifacts: project.toJSON().artifacts
-      }
+      agentName,
+      agentConfig
     });
     await sessionRepo.save(entity);
     
-    logger.info(`Created new session: ${sessionId}`);
+    logger.info(`Created new session: ${sessionId} with agent: ${agentName}`);
     
     return new AgentSession({
       entity,
@@ -130,14 +107,12 @@ export class AgentSession {
    * 
    * @param params.sessionId - Unique session identifier
    * @param params.dataSource - TypeORM data source for persistence
-   * @param params.createIfNotExists - If true, create a new session if it doesn't exist (default: true)
    */
   static async get(params: {
     sessionId: string;
     dataSource: DataSource;
-    createIfNotExists?: boolean;
   }): Promise<AgentSession> {
-    const { sessionId, dataSource, createIfNotExists = true } = params;
+    const { sessionId, dataSource } = params;
     
     // Load the session from the database
     const sessionRepo = dataSource.getRepository(AgentSessionEntity);
@@ -146,13 +121,6 @@ export class AgentSession {
     });
     
     if (!entity) {
-      if (createIfNotExists) {
-        // Create a new session if it doesn't exist
-        return await AgentSession.create({
-          sessionId,
-          dataSource
-        });
-      }
       throw new Error(`Session not found: ${sessionId}`);
     }
     
@@ -173,122 +141,83 @@ export class AgentSession {
   }
 
   /**
-   * Check if there's an active stream (uiMessageChunks exists and has content)
+   * Check if there's an active stream
    */
   hasActiveStream(): boolean {
-    return !!(this.entity.uiMessageChunks && this.entity.uiMessageChunks.length > 0);
+    return this.entity.hasActiveStream;
   }
 
   /**
-   * Stream uiMessageChunks from the database as a UIMessageStream.
-   * Streams existing chunks first, then polls for new chunks until uiMessageChunks becomes null or timeout is reached.
-   * Uses query builder to select only the uiMessageChunks field for better performance.
+   * Stream uiMessageChunks from Redis as a UIMessageStream.
+   * Uses Redis blocking reads to stream chunks until the stream is finished.
    * 
    * @returns UIMessageStream that yields chunks as they become available
    */
-  streamFromDatabase(): UIMessageStream {
-    // Capture session ID, data source, and initial chunks before creating stream
+  resumeChatStream(): UIMessageStream {
     const sessionId = this.entity.id;
-    const dataSource = this.dataSource;
-    const initialChunks = this.entity.uiMessageChunks || [];
-    let lastChunkIndex = initialChunks.length;
-    let lastChunkUpdateTime = Date.now();
-    const startTime = Date.now();
 
-    return new ReadableStream<InferUIMessageChunk<UIMessage>>({
-      async start(controller) {
-        // Stream existing chunks first
-        for (const chunk of initialChunks) {
-          controller.enqueue(chunk);
-        }
+    return createUIMessageStream({
+      execute: async ({ writer }) => {
+        const redis = await getRedisClient();
+        const streamKey = getSessionStreamKey({ sessionId });
+        let lastMessageId = "0"; // Start from beginning
 
-        // Poll for new chunks
-        let shouldClose = false;
-        while (!shouldClose) {
-          await new Promise(resolve => setTimeout(resolve, STREAM_CHUNK_POLL_INTERVAL_MS));
+        try {
+          // Keep reading chunks using blocking read, starting from beginning
+          while (true) {
+            // Block for up to STALE_STREAM_TIMEOUT_MS waiting for chunks
+            const res = await redis.xRead(
+              { key: streamKey, id: lastMessageId },
+              { BLOCK: STALE_STREAM_TIMEOUT_MS }
+            );
 
-          // Check if we've exceeded max polling timeout
-          const totalElapsed = Date.now() - startTime;
-          if (totalElapsed > STALE_STREAM_TIMEOUT_MS) {
-            logger.warn(`Max polling timeout reached for session: ${sessionId}`);
-            shouldClose = true;
-            break;
-          }
-
-          // Use query builder to select only uiMessageChunks field for better performance
-          const sessionRepo = dataSource.getRepository(AgentSessionEntity);
-          const result = await sessionRepo
-            .createQueryBuilder("session")
-            .select("session.uiMessageChunks", "uiMessageChunks")
-            .where("session.id = :id", { id: sessionId })
-            .getRawOne();
-
-          if (!result) {
-            logger.warn(`Session disappeared during polling: ${sessionId}`);
-            shouldClose = true;
-            break;
-          }
-
-          // If uiMessageChunks is null, stream is finished
-          if (result.uiMessageChunks === null) {
-            shouldClose = true;
-            break;
-          }
-
-          // Stream any new chunks
-          const currentChunks = result.uiMessageChunks || [];
-          if (currentChunks.length > lastChunkIndex) {
-            for (let i = lastChunkIndex; i < currentChunks.length; i++) {
-              controller.enqueue(currentChunks[i]);
-            }
-            lastChunkIndex = currentChunks.length;
-            lastChunkUpdateTime = Date.now();
-          } else {
-            // No new chunks - check if we've been waiting too long
-            const timeSinceLastChunk = Date.now() - lastChunkUpdateTime;
-            if (timeSinceLastChunk > STALE_STREAM_TIMEOUT_MS) {
-              logger.warn(`No new chunks received for ${Math.round(timeSinceLastChunk / 1000)}s, stopping polling for session: ${sessionId}`);
-              shouldClose = true;
+            // No chunks received - stream is finished or deleted
+            if (!res || res.length === 0) {
+              // Otherwise, stream is complete
+              logger.info(`Stream complete for session: ${sessionId}`);
               break;
             }
-          }
-        }
 
-        controller.close();
+            // Process chunks
+            for (const streamData of res) {
+              for (const message of streamData.messages) {
+                // Check for sentinel message using type field (no JSON parsing needed)
+                if (message.message.type === "stream-end") {
+                  logger.info(`Stream end sentinel received for session: ${sessionId}`);
+                  return; // Exit the execute function, ending the stream
+                }
+                
+                const data = JSON.parse(message.message.data);
+                writer.write(data);
+                lastMessageId = message.id;
+              }
+            }
+          }
+        } finally {
+          // Always clean up Redis connection
+          await redis.quit();
+        }
+      },
+      onError: (error) => {
+        logger.error(error, `Resume stream error for session ${sessionId}`);
+        return typeof error === "string" ? error : "An error occurred while resuming stream";
       }
     });
   }
 
   /**
-   * Finalize stale stream by converting uiMessageChunks to a message if they haven't been updated recently.
-   * This method checks if uiMessageChunks exists and if updatedAt is older than STALE_STREAM_TIMEOUT_MS.
-   * If stale, it converts the chunks to a UIMessage, merges it into uiMessages, and clears uiMessageChunks.
-   * 
-   * @returns true if stream was finalized, false otherwise
+   * Private method to finalize a stream by converting chunks to a UIMessage
+   * and saving to the database
    */
-  async finalizeStaleStream(): Promise<boolean> {
-    // Check if there are active chunks
-    if (!this.entity.uiMessageChunks || this.entity.uiMessageChunks.length === 0) {
-      return false;
-    }
+  private async finalizeStream(params: {
+    uiMessageChunks: Array<InferUIMessageChunk<UIMessage>>;
+  }): Promise<void> {
+    logger.info(`Finalizing stream for session: ${this.entity.id}`);
 
-    // Check if stream is stale based on updatedAt
-    if (!this.entity.updatedAt) {
-      return false;
-    }
+    const { uiMessageChunks } = params;
 
-    const now = Date.now();
-    const updatedAt = this.entity.updatedAt.getTime();
-    const timeSinceUpdate = now - updatedAt;
-   
-    if (timeSinceUpdate < STALE_STREAM_TIMEOUT_MS) {
-      return false;
-    }
-
-    logger.info(`Finalizing stale stream for session: ${this.entity.id} (stale for ${Math.round(timeSinceUpdate / 1000)}s)`);
-
-    // Convert chunks to UIMessage
-    const chunkStream = arrayToStream(this.entity.uiMessageChunks!);
+    // Reconstruct UIMessage from chunks by creating a stream from the array
+    const chunkStream = arrayToStream(uiMessageChunks);
     const messageStream = readUIMessageStream({ stream: chunkStream });
     
     let finalMessage: UIMessage | null = null;
@@ -296,15 +225,72 @@ export class AgentSession {
       finalMessage = message;
     }
 
-    // Update entity with final message and clear chunks
-    const currentUIMessages = this.entity.uiMessages || [];
+    // Append final message to current UI messages and save
     if (finalMessage) {
-      this.entity.uiMessages = [...currentUIMessages, finalMessage as TypedUIMessage];
+      this.entity.uiMessages = [...this.entity.uiMessages, finalMessage as TypedUIMessage];
     }
-    this.entity.uiMessageChunks = null;
+    this.entity.hasActiveStream = false;
     await this.entity.save();
 
-    return true;
+    // Delete the Redis stream
+    const redis = await getRedisClient();
+    try {
+      const streamKey = getSessionStreamKey({ sessionId: this.entity.id });
+      await redis.xAdd(streamKey, "*", { type: "stream-end" });
+      await redis.del(streamKey);
+      logger.info(`Finalized stream for session: ${this.entity.id}`);
+    } finally {
+      await redis.quit();
+    }
+  }
+
+  /**
+   * Finalize stale stream by converting chunks from Redis to a message if they haven't been updated recently.
+   * This method checks if hasActiveStream is true and if the last entry in the Redis stream 
+   * is older than STALE_STREAM_TIMEOUT_MS.
+   * If stale, it reads chunks from Redis, converts them to a UIMessage, merges it into uiMessages, 
+   * clears the Redis stream, and sets hasActiveStream to false.
+   * 
+   * @returns true if stream was finalized, false otherwise
+   */
+  async finalizeStaleStream(): Promise<boolean> {
+    // Check if there's an active stream
+    if (!this.entity.hasActiveStream) {
+      return false;
+    }
+
+    // Read all chunks from Redis
+    const redis = await getRedisClient();
+    try {
+      const streamKey = getSessionStreamKey({ sessionId: this.entity.id });
+      const chunks = await redis.xRange(streamKey, "-", "+");
+
+      // Check if stream is stale based on last chunk timestamp
+      // Redis stream IDs are in format: timestamp-sequence (e.g., "1234567890123-0")
+      const lastChunk = chunks[chunks.length - 1];
+      const lastChunkTimestamp = parseInt(lastChunk.id.split("-")[0]);
+      const now = Date.now();
+      const timeSinceUpdate = now - lastChunkTimestamp;
+     
+      if (timeSinceUpdate < STALE_STREAM_TIMEOUT_MS) {
+        logger.info(`Stream for session: ${this.entity.id} is not stale yet (${Math.round(timeSinceUpdate / 1000)}s old)`);
+        return false;
+      }
+
+      logger.info(`Finalizing stale stream for session: ${this.entity.id} (stale for ${Math.round(timeSinceUpdate / 1000)}s)`);
+
+      // Convert Redis stream entries to UIMessageChunks
+      const uiMessageChunks: Array<InferUIMessageChunk<UIMessage>> = chunks.map(chunk => 
+        JSON.parse(chunk.message.data)
+      );
+
+      // Use the shared finalization logic
+      await this.finalizeStream({ uiMessageChunks });
+
+      return true;
+    } finally {
+      await redis.quit();
+    }
   }
 
   /**
@@ -350,135 +336,143 @@ Return only the title, nothing else.`,
    * 1. Creates the agent with current config and session project
    * 2. Converts UIMessages to ModelMessages for the agent
    * 3. Saves incoming UI messages to the database (client sends all messages including history)
-   * 4. Creates a UI message stream that pipes chunks through while saving them to uiMessageChunks
+   * 4. Creates a UI message stream that pipes chunks through while saving them to Redis
    * 5. Converts chunks to a UIMessage on finish and merges into uiMessages array
    * 
    * Note: 
    * - Client is responsible for loading existing messages and including them in the request.
-   * - The stream pipes chunks through directly (no forking needed).
-   * - Chunks are saved incrementally to uiMessageChunks field.
-   * - On finish, chunks are converted to a UIMessage and merged into uiMessages array.
+   * - Uses createUIMessageStream for better lifecycle control.
+   * - Chunks are saved to Redis stream as they flow through.
+   * - On finish, chunks are read from Redis, converted to a UIMessage, and merged into uiMessages array.
    */
-  async stream(params: {
+  chat(params: {
     uiMessages: TypedUIMessage[];
-    agentName: string;
-    agentConfig: Record<string, any>;
     onFinish?: EvoAgentCallback;
     onError?: EvoAgentOnErrorCallback;
-  }): Promise<UIMessageStream> {
-    const { uiMessages, agentName, agentConfig, onFinish, onError } = params;
+  }): UIMessageStream {
+    const { uiMessages, onFinish, onError } = params;
 
-    logger.info(`Starting stream for session: ${this.entity.id}`);
+    // Get agent name and config from entity
+    const agentName = this.entity.agentName;
+    const agentConfig = this.entity.agentConfig || {};
 
-    // Convert UIMessages to ModelMessages for the agent
-    const messages = convertToModelMessages(uiMessages);
-
-    // Create the agent with current project and config
-    const agent = await createAgent({
-      name: agentName,
-      project: this._project,
-      config: agentConfig
-    });
-
-    // Keep local state for uiMessages and uiMessageChunks
-    let currentUIMessages = [...uiMessages];
-    const uiMessageChunks: Array<InferUIMessageChunk<UIMessage>> = [];
-
-    // Save initial uiMessages and initialize uiMessageChunks
-    this.entity.uiMessages = currentUIMessages;
-    this.entity.uiMessageChunks = [];
-    await this.entity.save();
-
-    // Generate title if session doesn't have one (runs asynchronously)
-    if (!this.entity.title) {
-      const title = await this.generateSessionTitle(currentUIMessages);
-      this.entity.title = title;
-      await this.entity.save();
+    if (!agentName) {
+      throw new Error(`Session ${this.entity.id} does not have an agentName set`);
     }
 
-    // Get the agent stream (might be async)
-    const agentStream = await agent.stream({
-      messages,
-      onFinish: async (finishParams) => {
-        // Early return if no chunks to convert
-        if (uiMessageChunks.length === 0) {
-          onFinish?.(finishParams);
-          return;
-        }
+    logger.info(`Starting chat for session: ${this.entity.id} with agent: ${agentName}`);
 
-        // Reconstruct UIMessage from chunks by creating a stream from the array
-        const chunkStream = new ReadableStream<InferUIMessageChunk<UIMessage>>({
-          start(controller) {
-            for (const chunk of uiMessageChunks) {
-              controller.enqueue(chunk);
+    // Keep local state for chunks (captured in closure)
+    const uiMessageChunks: Array<InferUIMessageChunk<UIMessage>> = [];
+    
+    // Use createUIMessageStream for better lifecycle control
+    return createUIMessageStream({
+      execute: async ({ writer }) => {
+        // Get Redis client and keys
+        const redis = await getRedisClient();
+        const streamKey = getSessionStreamKey({ sessionId: this.entity.id });
+
+        try {
+          // Clear any existing stream data
+          await redis.del(streamKey);
+
+          // Create the agent with a new project and config
+          const agent = await createAgent({
+            name: agentName,
+            project: new Project(),
+            config: agentConfig
+          });
+
+          // Keep local state for uiMessages
+          const currentUIMessages = [...uiMessages];
+
+          // Save initial uiMessages and set hasActiveStream to true
+          this.entity.uiMessages = currentUIMessages;
+          this.entity.hasActiveStream = true;
+          await this.entity.save();
+
+          // Generate title if session doesn't have one (runs asynchronously)
+          if (!this.entity.title) {
+            const title = await this.generateSessionTitle(currentUIMessages);
+            if (title) {
+              this.entity.title = title;
+              await this.entity.save();
             }
-            controller.close();
           }
-        });
-        const messageStream = readUIMessageStream({ stream: chunkStream });
-        
-        let finalMessage: UIMessage | null = null;
-        for await (const message of messageStream) {
-          finalMessage = message;
-        }
 
-        // Early return if conversion failed
-        if (!finalMessage) {
-          this.entity.uiMessageChunks = null;
-          await this.entity.save();
-          onFinish?.(finishParams);
-          return;
-        }
+          const messages = convertToModelMessages(uiMessages);
 
-        // Append final message to current UI messages and save
-        currentUIMessages = [...currentUIMessages, finalMessage as TypedUIMessage];
-        this.entity.uiMessages = currentUIMessages;
-        this.entity.uiMessageChunks = null;
-        this.entity.project = {
-          createdAt: this._project.createdAt,
-          updatedAt: this._project.updatedAt,
-          artifacts: this._project.toJSON().artifacts
-        };
-        await this.entity.save();
+          // Get agent stream
+          const agentStream = agent.chat({
+            messages,
+            onFinish,
+            onError
+          });
 
-        // Call original onFinish if provided
-        onFinish?.(finishParams);
-      },
-      onError
-    });
+          // Pipe agent stream through writer with chunk processing
+          await pipeUIMessageStream({
+            source: agentStream,
+            target: writer,
+            onChunk: async (chunk) => {
+              // Save chunk to local array
+              uiMessageChunks.push(chunk);
+              
+              // Save chunk to Redis stream with type field for efficient filtering
+              await redis.xAdd(
+                streamKey,
+                "*",
+                { 
+                  type: "stream-chunk" as RedisStreamMessageType,
+                  data: JSON.stringify(chunk) 
+                }
+              );
+            }
+          });
 
-    // Create a transform stream that pipes chunks through and saves them
-    let lastUpdateTime = Date.now();
-
-    const transformStream = new TransformStream<InferUIMessageChunk<UIMessage>, InferUIMessageChunk<UIMessage>>({
-      transform: async (chunk, controller) => {
-        // Pipe chunk through
-        controller.enqueue(chunk);
-        
-        // Save chunk locally
-        uiMessageChunks.push(chunk);
-        
-        // Periodically update uiMessageChunks in database
-        const now = Date.now();
-        if (now - lastUpdateTime > MESSAGE_CHUNKS_UPDATE_INTERVAL_MS) {
-          this.entity.uiMessageChunks = uiMessageChunks;
-          await this.entity.save();
-          lastUpdateTime = now;
+          // Write sentinel message to signal end of stream
+          await redis.xAdd(
+            streamKey,
+            "*",
+            { 
+              type: "stream-end" as RedisStreamMessageType,
+              data: JSON.stringify({ type: "stream-end" }) 
+            }
+          );
+        } finally {
+          await redis.quit();
         }
       },
-      flush: async () => {
-        // Final update with all chunks
-        if (uiMessageChunks.length > 0) {
-          this.entity.uiMessageChunks = uiMessageChunks;
-          await this.entity.save();
-        }
+      onFinish: async () => {
+        await this.finalizeStream({ uiMessageChunks });
+      },
+      onError: (error) => {
+        logger.error(error, `Stream error for session ${this.entity.id}`);
+        
+        // Write sentinel message to signal end of stream even on error (fire and forget)
+        (async () => {
+          const redis = await getRedisClient();
+          try {
+            const streamKey = getSessionStreamKey({ sessionId: this.entity.id });
+            await redis.xAdd(
+              streamKey,
+              "*",
+              { 
+                type: "stream-end" as RedisStreamMessageType,
+                data: JSON.stringify({ type: "stream-end" }) 
+              }
+            );
+          } finally {
+            await redis.quit();
+          }
+        })().catch(err => logger.error(err, "Failed to write sentinel on error"));
+        
+        // Finalize stream asynchronously (fire and forget)
+        this.finalizeStream({ uiMessageChunks }).catch(err => 
+          logger.error(err, "Failed to finalize stream after error")
+        );
+        return typeof error === "string" ? error : "An error occurred during streaming";
       }
     });
-
-    // Pipe agent stream through transform stream
-    agentStream.pipeThrough(transformStream);
-
-    return transformStream.readable;
   }
 }
 
