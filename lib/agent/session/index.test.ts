@@ -147,14 +147,24 @@ describe("AgentSession", () => {
     // Consume the stream
     await consumeStream({ stream });
 
-    // Wait for async finalization (increased timeout for CI)
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    // Verify messages were persisted
+    // Poll for messages to be persisted (more robust than fixed timeout)
     const sessionRepo = dataSource.getRepository(AgentSessionEntity);
-    const sessionEntity = await sessionRepo.findOne({
-      where: { id: sessionId }
-    });
+    let sessionEntity: AgentSessionEntity | null = null;
+    let attempts = 0;
+    const maxAttempts = 20; // 20 attempts * 200ms = 4 seconds max
+    
+    while (attempts < maxAttempts) {
+      sessionEntity = await sessionRepo.findOne({
+        where: { id: sessionId }
+      });
+      
+      if (sessionEntity && sessionEntity.uiMessages.length === 2 && !sessionEntity.hasActiveStream) {
+        break;
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, 200));
+      attempts++;
+    }
 
     expect(sessionEntity).toBeDefined();
     expect(sessionEntity?.uiMessages).toHaveLength(2); // user message + assistant message
@@ -187,8 +197,23 @@ describe("AgentSession", () => {
     // Consume the stream
     await consumeStream({ stream });
 
-    // Wait for async operations (increased timeout for CI)
-    await new Promise(resolve => setTimeout(resolve, 500));
+    // Poll for stream finalization (more robust than fixed timeout)
+    const sessionRepo = dataSource.getRepository(AgentSessionEntity);
+    let attempts = 0;
+    const maxAttempts = 20; // 20 attempts * 200ms = 4 seconds max
+    
+    while (attempts < maxAttempts) {
+      const sessionEntity = await sessionRepo.findOne({
+        where: { id: sessionId }
+      });
+      
+      if (sessionEntity && !sessionEntity.hasActiveStream) {
+        break;
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, 200));
+      attempts++;
+    }
 
     // Verify the session was created
     expect(session).toBeDefined();
@@ -216,8 +241,14 @@ describe("AgentSession", () => {
     // Consume the stream
     await consumeStream({ stream });
 
-    // Wait for async operations (increased timeout for CI)
-    await new Promise(resolve => setTimeout(resolve, 500));
+    // Poll for onFinish callback to be called (more robust than fixed timeout)
+    let attempts = 0;
+    const maxAttempts = 20; // 20 attempts * 200ms = 4 seconds max
+    
+    while (attempts < maxAttempts && !finishCalled) {
+      await new Promise(resolve => setTimeout(resolve, 200));
+      attempts++;
+    }
 
     expect(finishCalled).toBe(true);
     expect(finishResult).toBeDefined();
