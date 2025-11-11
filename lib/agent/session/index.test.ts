@@ -3,7 +3,7 @@ import { DataSource } from "typeorm";
 import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from "vitest";
 
 import { EvoAgent, StreamParams, UIMessageStream } from "@/lib/agent/core/agent";
-import { getConfig } from "@/lib/config";
+import { updateConfig } from "@/lib/config";
 import { AgentSessionEntity, getUserDataSource } from "@/lib/entities";
 import { registerAgentClass } from "@/lib/meta-agent";
 import { Project, TypedUIMessage } from "@/lib/types";
@@ -65,23 +65,16 @@ describe("AgentSession", () => {
   let dataSource: DataSource;
   let redisSetup: TestRedisSetup;
   const sessionId = "test-session-123";
-  let originalRedisUrl: string;
 
   beforeAll(async () => {
     // Set up Redis testcontainer
     redisSetup = await setupTestRedis();
     
-    // Store original redis URL from config and override with test URL
-    const config = getConfig();
-    originalRedisUrl = config.redis.url;
-    config.redis.url = redisSetup.url;
+    // Update config to use test Redis URL
+    updateConfig("redis.url", redisSetup.url);
   }, 60000);
 
   afterAll(async () => {
-    // Restore original redis URL in config
-    const config = getConfig();
-    config.redis.url = originalRedisUrl;
-    
     // Clean up Redis testcontainer
     await teardownTestRedis(redisSetup);
   }, 60000);

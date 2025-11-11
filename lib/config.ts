@@ -99,4 +99,23 @@ export function getConfig(): Config {
   return cachedConfig;
 }
 
+/**
+ * Update a config value dynamically
+ * Useful for testing to override config values
+ * @param path Dot-separated path to the config key (e.g., "redis.url")
+ * @param value The value to set
+ */
+export function updateConfig(path: string, value: any): void {
+  const config = getConfig();
+  setValue(config, path, value);
+}
+
+/**
+ * Reset the config cache
+ * Useful for testing to restore original config
+ */
+export function resetConfig(): void {
+  cachedConfig = null;
+}
+
 export const defaultAgentConfig = () => getConfig().agent;
