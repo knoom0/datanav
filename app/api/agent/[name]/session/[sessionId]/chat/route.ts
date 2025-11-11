@@ -34,6 +34,11 @@ async function postHandler(req: Request, { params }: RouteContext) {
 
   logger.info(`Creating session-wrapped ${name} agent for session: ${sessionId}`);
 
+  // TODO: Add session ownership verification - SECURITY ISSUE
+  // This endpoint retrieves sessions without checking if the authenticated user owns the session.
+  // Need to verify session.user_id matches current user before allowing access.
+  // See GitHub Copilot review comment and AgentSession.get() TODO for details.
+  
   // Get AgentSession (should already exist, created by page.tsx)
   const session = await AgentSession.get({
     sessionId,
@@ -80,11 +85,6 @@ async function getHandler(_req: Request, { params }: RouteContext): Promise<Next
     sessionId,
     dataSource,
   });
-  
-  if (!session) {
-    logger.warn(`Session not found for resume: ${sessionId}`);
-    return new NextResponse(null, { status: 204 });
-  }
     
   // Check if there's an active stream
   if (!session.hasActiveStream()) {

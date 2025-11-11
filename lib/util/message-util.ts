@@ -9,8 +9,8 @@ import { Project, PROJECT_PART_TYPE, UI_BUNDLE_PART_TYPE, REPORT_BUNDLE_PART_TYP
  */
 export function extractTextFromMessage(message: TypedUIMessage): string {
   // Check for simple content string (UIMessage can have content property)
-  if ((message as any).content && typeof (message as any).content === "string") {
-    return (message as any).content;
+  if ("content" in message && typeof message.content === "string") {
+    return message.content;
   }
 
   // Check for parts array

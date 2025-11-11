@@ -105,6 +105,14 @@ export class AgentSession {
   /**
    * Get an existing AgentSession by loading it from the database
    * 
+   * TODO: Add session ownership verification - SECURITY ISSUE
+   * Currently any authenticated user can access any session by ID.
+   * Need to:
+   * 1. Add user_id field to AgentSessionEntity
+   * 2. Accept userId parameter and filter queries by it
+   * 3. Verify session ownership before returning session data
+   * See GitHub Copilot review comment for details.
+   * 
    * @param params.sessionId - Unique session identifier
    * @param params.dataSource - TypeORM data source for persistence
    */
@@ -268,7 +276,12 @@ export class AgentSession {
       // Check if stream is stale based on last chunk timestamp
       // Redis stream IDs are in format: timestamp-sequence (e.g., "1234567890123-0")
       const lastChunk = chunks[chunks.length - 1];
-      const lastChunkTimestamp = parseInt(lastChunk.id.split("-")[0]);
+      const idParts = typeof lastChunk.id === "string" ? lastChunk.id.split("-") : [];
+      if (idParts.length < 2 || isNaN(parseInt(idParts[0], 10))) {
+        logger.warn(`Malformed Redis stream ID "${lastChunk.id}" for session: ${this.entity.id}. Cannot determine staleness.`);
+        return false;
+      }
+      const lastChunkTimestamp = parseInt(idParts[0], 10);
       const now = Date.now();
       const timeSinceUpdate = now - lastChunkTimestamp;
      

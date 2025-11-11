@@ -9,6 +9,9 @@ import { safeErrorString } from "@/lib/util/log-util";
 
 export const SCHEMA_NAME = "datanav";
 
+// Embedding dimension for OpenAI's text-embedding-3-small model
+export const EMBEDDING_DIMENSION = 1536;
+
 @Entity({ name: "user_database_config", schema: SCHEMA_NAME })
 export class UserDatabaseConfig extends BaseEntity {
   @PrimaryColumn({ type: "varchar" })
@@ -47,7 +50,7 @@ export class AgentStrategyEntity extends BaseEntity {
   @Column({ type: "json", nullable: true })
     samplePrompts!: string[] | null;
 
-  @Column({ type: "vector", length: 1536 })
+  @Column({ type: "vector", length: EMBEDDING_DIMENSION })
     topicEmbedding!: number[];
 
   @CreateDateColumnUTC()

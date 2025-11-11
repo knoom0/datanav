@@ -171,6 +171,9 @@ export type EvalParams = {
 };
 
 export interface EvoAgent {
+  // TODO: Consider making project readonly to prevent unintended mutations
+  // Changed from readonly to mutable to support session-based project updates
+  // Evaluate if getter/setter with validation would provide better encapsulation
   project: Project;
   chat(params: StreamParams): UIMessageStream;
 }
