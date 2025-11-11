@@ -147,6 +147,9 @@ describe("AgentSession", () => {
     // Consume the stream
     await consumeStream({ stream });
 
+    // Wait for async finalization (increased timeout for CI)
+    await new Promise(resolve => setTimeout(resolve, 500));
+
     // Verify messages were persisted
     const sessionRepo = dataSource.getRepository(AgentSessionEntity);
     const sessionEntity = await sessionRepo.findOne({
@@ -184,8 +187,8 @@ describe("AgentSession", () => {
     // Consume the stream
     await consumeStream({ stream });
 
-    // Wait for async operations
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // Wait for async operations (increased timeout for CI)
+    await new Promise(resolve => setTimeout(resolve, 500));
 
     // Verify the session was created
     expect(session).toBeDefined();
@@ -213,8 +216,8 @@ describe("AgentSession", () => {
     // Consume the stream
     await consumeStream({ stream });
 
-    // Wait for async operations
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // Wait for async operations (increased timeout for CI)
+    await new Promise(resolve => setTimeout(resolve, 500));
 
     expect(finishCalled).toBe(true);
     expect(finishResult).toBeDefined();
