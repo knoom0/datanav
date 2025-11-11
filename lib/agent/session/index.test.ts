@@ -256,16 +256,6 @@ describe("AgentSession", () => {
       attempts++;
     }
 
-    if (!finishCalled) {
-      // Add diagnostic info
-      const sessionRepo = dataSource.getRepository(AgentSessionEntity);
-      const sessionEntity = await sessionRepo.findOne({ where: { id: sessionId } });
-      console.log("onFinish not called after polling. Session state:", {
-        hasActiveStream: sessionEntity?.hasActiveStream,
-        messageCount: sessionEntity?.uiMessages.length
-      });
-    }
-
     expect(finishCalled).toBe(true);
     expect(finishResult).toBeDefined();
   });
