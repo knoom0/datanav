@@ -39,7 +39,7 @@ export interface Config {
   };
   packages: Record<string, any>;
   redis: {
-    url: string;
+    url?: string;
   };
 }
 

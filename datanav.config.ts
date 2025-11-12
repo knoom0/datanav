@@ -85,5 +85,6 @@ export const config = {
   },
 
   redis: {
+    url: "redis://localhost:6379",
   },
 };
