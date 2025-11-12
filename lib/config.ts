@@ -39,7 +39,7 @@ export interface Config {
   };
   packages: Record<string, any>;
   redis: {
-    url: string;
+    url?: string;
   };
 }
 
@@ -60,7 +60,7 @@ function buildConfig(rawConfig: any) {
     DATANAV_EMAIL_SENDER: "email.sender",
     DATANAV_EMAIL_SENDER_NAME: "email.senderName",
     DATANAV_HOSTING_ENABLED: "hosting.enabled",
-    REDIS_URL: "redis.url"
+    DATANAV_REDIS_URL: "redis.url"
   };
   
   // Check each environment variable and apply overrides

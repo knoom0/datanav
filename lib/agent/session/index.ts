@@ -402,6 +402,8 @@ Return only the title, nothing else.`,
           this.entity.hasActiveStream = true;
           await this.entity.save();
 
+          // TODO: Move title generation to a background task or post-stream callback 
+          // to avoid blocking the streaming response and adding latency to user's first interaction
           // Generate title if session doesn't have one (runs asynchronously)
           if (!this.entity.title) {
             const title = await this.generateSessionTitle(currentUIMessages);
@@ -459,6 +461,8 @@ Return only the title, nothing else.`,
       onError: (error) => {
         logger.error(error, `Stream error for session ${this.entity.id}`);
         
+        // TODO: Extract duplicate sentinel writing logic to a private method (e.g., writeSentinel()) 
+        // to avoid code duplication between onError and execute blocks
         // Write sentinel message to signal end of stream even on error (fire and forget)
         (async () => {
           const redis = await getRedisClient();
